@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "omero_mdv"
+version = "0.0.1.dev0"
+description = "OMERO.web plugin for Multi Dimensional Viewer (MDV)"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "omero-web",
+    "mdv"
+]
+dependency_links=[
+    "git+https://github.com/will-moore/MDV.git@pip_installable#subdirectory=python"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/will-moore/omero-mdv"
