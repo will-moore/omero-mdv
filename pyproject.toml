@@ -14,10 +14,6 @@ classifiers = [
 ]
 dependencies = [
     "omero-web",
-    "mdv"
-]
-dependency_links=[
-    "git+https://github.com/will-moore/MDV.git@pip_installable#subdirectory=python"
 ]
 
 [project.urls]
