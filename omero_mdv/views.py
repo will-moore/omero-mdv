@@ -16,7 +16,7 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 
 
 @login_required()
-def index(request, conn=None, **kwargs):
+def choose_data(request, conn=None, **kwargs):
 
     # get dataset etc...
     obj_id = None
@@ -29,7 +29,7 @@ def index(request, conn=None, **kwargs):
     if obj_id is None:
         return HttpResponse("Welcome to OMERO-MDV! - Use ?project=1 or ?dataset=1 to open.")
 
-    obj = conn.getObject(dtype, obj_id)
+    obj = conn.getObject(obj_type, obj_id)
     if obj is None:
         raise Http404(f"Couldn't find {dtype}: {obj_id}")
 
@@ -47,19 +47,18 @@ def index(request, conn=None, **kwargs):
                 }
             })
 
-    return render(request, "omero_mdv/index.html", {"anns": anns})
+    return render(request, "mdv/choose_data.html", {"anns": anns})
 
 
 @login_required()
 def submit_form(request, conn=None, **kwargs):
 
     # Handle form data from index page 
-
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
     file_id = request.POST.get("file")
 
-    url = reverse("mdv_urls", kwargs={"url": ""})
+    url = reverse("mdv_index")
     config_url = "config/" + file_id + "/"
 
     # redirect to app, with absolute config URL...
@@ -71,19 +70,27 @@ def submit_form(request, conn=None, **kwargs):
     return HttpResponseRedirect("%s?dir=%s" % (url, config_url))
 
 
-def mdv_urls(request, url):
+# we don't really need login here, but if not logged-in then
+# loading other data will fail silently
+@login_required()
+def index(request, **kwargs):
+    """ Main MDV viewer page """
+    # home page of the mdv app - return index.html
+    rsp = render(request, "mdv/index.html", {})
+    # headers to allow SharedArrayBuffer
+    rsp["Cross-Origin-Opener-Policy"] = "same-origin"
+    rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
+    return rsp
 
-    if len(url) == 0:
-        # home page of the mdv app - return mdv_index.html
-        rsp = render(request, "omero_mdv/mdv_index.html", {})
-        # headers to allow SharedArrayBuffer
-        rsp["Cross-Origin-Opener-Policy"] = "same-origin"
-        rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
-        return rsp
 
-
-    url = static('omero-mdv/' + url)
-
+def mdv_static(request, url):
+    """
+    The MDV viewer requests all static files with relative URLs.
+    
+    So we need to redirect
+    e.g 'assets/mdv.js' to `static/omero-mdv/assets/mdv.js`
+    """
+    url = static('mdv/' + url)
     return HttpResponseRedirect(url)
 
 
