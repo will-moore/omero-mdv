@@ -2,21 +2,17 @@
 
 import gzip
 import numpy as np
-import requests
+import pandas as pd
 import re
 from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.shortcuts import render
+from django.templatetags.static import static
 
 import omero
 from omeroweb.decorators import login_required
 from omero.rtypes import unwrap
-from omeroweb.webgateway.views import render_thumbnail
-
-MDV_APP = "https://mdv-dev.netlify.app/"
-
-# if running app from local vite.js dev server
-# MDV_APP = "http://localhost:5173/"  # "http://10.201.197.162:5173/"
+from omeroweb.webgateway.views import render_thumbnail, render_image
 
 
 @login_required()
@@ -40,10 +36,8 @@ def index(request, conn=None, **kwargs):
     # get annotations...\
     anns = []
     for ann in obj.listAnnotations():
-        print("ann", ann, ann.ns)
         if hasattr(ann, "file"):
             f = ann.file
-            print(f.mimetype.val, f.name.val)
             anns.append({
                 "id": ann.id,
                 "file": {
@@ -64,7 +58,6 @@ def submit_form(request, conn=None, **kwargs):
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
     file_id = request.POST.get("file")
-    print("file_id", file_id)
 
     url = reverse("mdv_urls", kwargs={"url": ""})
     config_url = "config/" + file_id + "/"
@@ -80,29 +73,18 @@ def submit_form(request, conn=None, **kwargs):
 
 def mdv_urls(request, url):
 
-    print("url", repr(url))
-
-    target_url = MDV_APP + url
-
-    response = requests.get(target_url)
-    content = response.content
-
     if len(url) == 0:
-        # update links in html doc
-        base_url = reverse("mdv_urls", kwargs={"url": ""})
-        link_with_prefix = f'="{base_url}/assets/'
-        content = content.replace(b'="/assets/', bytearray(link_with_prefix, 'utf-8'))
+        # home page of the mdv app - return mdv_index.html
+        rsp = render(request, "omero_mdv/mdv_index.html", {})
+        # headers to allow SharedArrayBuffer
+        rsp["Cross-Origin-Opener-Policy"] = "same-origin"
+        rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
+        return rsp
 
-    rsp = HttpResponse(content)
 
-    # headers to allow SharedArrayBuffer
-    rsp["Cross-Origin-Opener-Policy"] = "same-origin"
-    rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
+    url = static('omero-mdv/' + url)
 
-    if url.endswith(".js"):
-        rsp['content-type'] = "application/javascript"
-
-    return rsp
+    return HttpResponseRedirect(url)
 
 
 @login_required()
@@ -148,21 +130,20 @@ def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
 
 def get_column_bytes(table, column_index):
 
-    print('get_column_bytes', column_index)
     row_count = table.getNumberOfRows()
     col_indices = [column_index]
     hits = range(row_count)
     res = table.slice(col_indices, hits)
     values = res.columns[0].values
-    print('values', values, type(values[0]))
     dt = np.dtype(type(values[0]))
     if dt == np.int64:
-        print("BYTES change")
-        dt = np.int64
-    print('dt', dt)
-    arr = np.array(values)
+        # MDV api expects float32
+        dt = np.float32
+    else:
+        # FIXME - this doesn't work!
+        dt = str
+    arr = np.array(values, dt)
 
-    print(arr, arr.size, repr(arr[0]) )
     comp = gzip.compress(arr.tobytes())
 
     return comp
@@ -171,10 +152,8 @@ def get_column_bytes(table, column_index):
 @login_required()
 def table_bytes(request, tableid, conn=None, **kwargs):
 
-    print("headers", request.headers)
     range_header = request.headers['Range']
 
-    print('range_header', range_header)
 
     m = re.search('(\d+)-(\d*)', range_header)
     g = m.groups()
@@ -241,7 +220,6 @@ def table_bytes(request, tableid, conn=None, **kwargs):
 @login_required()
 def views(request, tableid, conn=None, **kwargs):
 
-    print('views', tableid)
 
     # only offer a single view initially...
     views = []
@@ -274,44 +252,44 @@ def views(request, tableid, conn=None, **kwargs):
         col_widths[name] = len(name) * 10
 
     # lets add a table...
-    # views.append({
-    #     "title": "Table",
-    #     "legend": "Some table data",
-    #     "type": "table_chart",
-    #     "param": column_names,
-    #     "id": "table_chart_%s" % tableid,
-    #     "size": [
-    #         chart_width,
-    #         chart_height
-    #     ],
-    #     "column_widths": col_widths,
-    #     "position": [
-    #         pos_x,
-    #         pos_y
-    #     ]
-    # })
-    # pos_x = pos_x + chart_width + gap
+    views.append({
+        "title": "Table",
+        "legend": "Some table data",
+        "type": "table_chart",
+        "param": column_names,
+        "id": "table_chart_%s" % tableid,
+        "size": [
+            chart_width,
+            chart_height
+        ],
+        "column_widths": col_widths,
+        "position": [
+            pos_x,
+            pos_y
+        ]
+    })
+    pos_x = pos_x + chart_width + gap
 
 
     # If we have multiple number columns, add Scatter Plot...
-    # if len(number_cols) > 1:
-    #     views.append({
-    #         "type":"wgl_scatter_plot",
-    #         "title":"Scatter Plot",
-    #         "param":[
-    #             number_cols[0].name,
-    #             number_cols[1].name
-    #         ],
-    #         "size": [
-    #             chart_width,
-    #             chart_height
-    #         ],
-    #         "position": [
-    #             pos_x,
-    #             pos_y
-    #         ]
-    #     })
-    #     pos_x = pos_x + chart_width + gap
+    if len(number_cols) > 1:
+        views.append({
+            "type":"wgl_scatter_plot",
+            "title":"Scatter Plot",
+            "param":[
+                number_cols[0].name,
+                number_cols[1].name
+            ],
+            "size": [
+                chart_width,
+                chart_height
+            ],
+            "position": [
+                pos_x,
+                pos_y
+            ]
+        })
+        pos_x = pos_x + chart_width + gap
 
 
     if image_col:
@@ -322,7 +300,7 @@ def views(request, tableid, conn=None, **kwargs):
             "type": "image_table_chart",
             "param": [image_col.name],
             "images": {
-                "base_url": "./images/",
+                "base_url": "./thumbnail/",
                 "type": "png"
             },
             "id": "6qxshC",
@@ -337,6 +315,31 @@ def views(request, tableid, conn=None, **kwargs):
             ]
         })
         pos_x = pos_x + chart_width + gap
+
+    # Show a summary - selected Image (if we have Images)
+    views.append({
+        "title": "Summary",
+        "legend": "",
+        "type": "row_summary_box",
+        "param": column_names,
+        "image": {
+            "base_url": "./image/",
+            "type": "png",
+            "param": 0
+        },
+        "id": "XulQsf",
+         "size": [
+            chart_width,
+            chart_height
+        ],
+        "image_width": chart_width,
+        "position": [
+            pos_x,
+            pos_y
+        ]
+    })
+    pos_x = pos_x + chart_width + gap
+
 
     vw = {
         "main": {
@@ -444,7 +447,6 @@ def views(request, tableid, conn=None, **kwargs):
 @login_required()
 def datasources(request, tableid, conn=None, **kwargs):
 
-    print('datasources', tableid)
 
     # open table and get columns...
     r = conn.getSharedResources()
@@ -469,9 +471,7 @@ def datasources(request, tableid, conn=None, **kwargs):
     }
 
     for col in cols:
-        print("col", col)
         colclass = col.__class__.__name__
-        print("class", colclass)
         col_data = {
             "datatype": col_types[colclass],
             "name": col.name,   # display name
@@ -518,6 +518,10 @@ def datasources(request, tableid, conn=None, **kwargs):
 
 
 @login_required()
-def image(request, imageid, conn=None, **kwargs):
+def thumbnail(request, imageid, conn=None, **kwargs):
+    return render_thumbnail(request, imageid, conn=conn)
 
-    return render_thumbnail(request, 59, conn=conn)
+
+@login_required()
+def image(request, imageid, conn=None, **kwargs):
+    return render_image(request, imageid, conn=conn)

@@ -19,7 +19,8 @@ urlpatterns = [
     re_path(r"^mdv/config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),
     re_path(r"^mdv/config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).b$", views.table_bytes),
 
-    re_path(r"^mdv/config/(?P<configid>[0-9]+)/images/(?P<imageid>[0-9]+).png$", views.image),
+    re_path(r"^mdv/config/(?P<configid>[0-9]+)/thumbnail/(?P<imageid>[0-9]+).png$", views.thumbnail),
+    re_path(r"^mdv/config/(?P<configid>[0-9]+)/image/(?P<imageid>[0-9]+).png$", views.image),
 
     # MDV viewer itself is at /mdv/
     # Delegate all /mdv/... urls to statically-hosted files or json etc
