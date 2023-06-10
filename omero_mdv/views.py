@@ -14,6 +14,14 @@ from omeroweb.decorators import login_required
 from omero.rtypes import unwrap
 from omeroweb.webgateway.views import render_thumbnail, render_image
 
+from django.conf import settings
+
+
+# Ensure that middleware gets added
+HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
+if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
+    settings.MIDDLEWARE = settings.MIDDLEWARE + (HEADERS_MIDDLEWARE,)
+
 
 @login_required()
 def choose_data(request, conn=None, **kwargs):
@@ -77,9 +85,6 @@ def index(request, **kwargs):
     """ Main MDV viewer page """
     # home page of the mdv app - return index.html
     rsp = render(request, "mdv/index.html", {})
-    # headers to allow SharedArrayBuffer
-    rsp["Cross-Origin-Opener-Policy"] = "same-origin"
-    rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
     return rsp
 
 

@@ -17,6 +17,25 @@ to the OMERO-web framework.
 
 ```
 
+# Headers
+
+MDV requires particular headers to allow SharedArrayBuffers to work in the browser.
+These will be added by Django Middleware but are not included for static requests.
+When deployed in production, these headers should be added by NGINX.
+
+```
+    Cross-Origin-Opener-Policy: same-origin
+    Cross-Origin-Embedder-Policy: require-corp
+```
+
+When running the development devserver, we need force the processing of static
+requests via the Middleware, which can be achieved with `--nostatic`, e.g:
+
+```
+    $ python omeroweb/manage.py runserver 4080 --nostatic
+```
+
+
 # Update MDV viewer
 
 The MDV viewer html and static assets are hosted in this repo
