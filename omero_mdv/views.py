@@ -417,7 +417,7 @@ def datasources(request, tableid, conn=None, **kwargs):
 
                 # DEBUG: with this, we get the values (indices rendered correctly)
                 # but without it, we get invalid text values
-                col_data["datatype"] = "integer"
+                # col_data["datatype"] = "integer"
 
             cols_data.append(col_data)
     finally:
