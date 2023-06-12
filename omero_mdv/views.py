@@ -148,7 +148,8 @@ def get_column_bytes(table, column_index):
     res = table.slice(col_indices, hits)
     values = res.columns[0].values
     dt = np.dtype(type(values[0]))
-    if dt == np.int64:
+    # kind of number is integer, floating-point or complex
+    if dt.kind in "iufc":
         # MDV api expects float32
         dt = np.float32
     else:
