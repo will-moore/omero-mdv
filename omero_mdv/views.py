@@ -140,23 +140,32 @@ def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
     return JsonResponse(col_byte_offsets)
 
 
-def get_column_bytes(table, column_index):
+def get_text_indices(values):
+    unique_values = list(set(values))
+    val_dict = {value: i for i, value in enumerate(unique_values)}
+    return [val_dict[v] for v in values], [str(s) for s in unique_values]
 
+
+def get_column_values(table, column_index):
     row_count = table.getNumberOfRows()
     col_indices = [column_index]
     hits = range(row_count)
     res = table.slice(col_indices, hits)
-    values = res.columns[0].values
-    dt = np.dtype(type(values[0]))
-    # kind of number is integer, floating-point or complex
-    if dt.kind in "iufc":
-        # MDV api expects float32
-        dt = np.float32
-    else:
-        # FIXME - this doesn't work!
-        dt = str
-    arr = np.array(values, dt)
+    return res.columns[0].values
 
+
+def get_column_bytes(table, column_index):
+    values = get_column_values(table, column_index)
+    dt = np.dtype(type(values[0]))
+    # if string, the values we want are indices
+    print('dt str', dt == str)
+    if dt == str:
+        indices, vals = get_text_indices(values)
+        values = indices
+        print("strig indices, vals", indices, vals)
+
+    # MDV expects float32 encoding
+    arr = np.array(values, np.float32)
     comp = gzip.compress(arr.tobytes())
 
     return comp
@@ -363,99 +372,6 @@ def views(request, tableid, conn=None, **kwargs):
             }
         }
     }
-
-                
-    #             {
-    #                 # Filter is for categories (string columns)
-    #                 "title": "Filter",
-    #                 "legend": "",
-    #                 "type": "selection_dialog",
-    #                 "param": [
-    #                     "GO biological process",
-    #                     "GO molecular function",
-    #                     "GO cellular component"
-    #                 ],
-    #                 "id": "NDdxNC",
-    #                 "size": [283, 375],
-    #                 "filters": {
-    #                     "GO biological process": {
-    #                     "operand": "or",
-    #                     "category": [],
-    #                     "exclude": False
-    #                     },
-    #                     "GO cellular component": {
-    #                     "operand": "or",
-    #                     "category": [],
-    #                     "exclude": False
-    #                     },
-    #                     "GO molecular function": {
-    #                     "operand": "or",
-    #                     "category": [],
-    #                     "exclude": False
-    #                     }
-    #                 },
-    #                 "position": [10, 10]
-    #             },
-    #             {
-    #                 # Show a summary of the selected table row
-    #                 "title": "Summary",
-    #                 "legend": "",
-    #                 "type": "row_summary_box",
-    #                 "param": [
-    #                     "Collection",
-    #                     "Compartment",
-    #                     "FlyBase link",
-    #                     "OMEROFigurelink",
-    #                     "figure_id"
-    #                 ],
-    #                 "image": {
-    #                     "base_url": "./thumbnails/",
-    #                     "type": "jpg",
-    #                     "param": 4
-    #                 },
-    #                 "id": "XulQsf",
-    #                 "size": [359, 574],
-    #                 "position": [306, 4]
-    #             },
-    #             {
-    #                 # Thumbnails to show filtered images
-    #                 "title": "Thumbnails",
-    #                 "legend": "",
-    #                 "type": "image_table_chart",
-    #                 "param": ["figure_id"],
-    #                 "images": {
-    #                     "base_url": "./images/",
-    #                     "type": "png"
-    #                 },
-    #                 "id": "6qxshC",
-    #                 "size": [599, 672],
-    #                 "image_width": 146.07,
-    #                 "position": [1068, 0]
-    #             },
-    #             {
-    #                 # Histogram of Category column
-    #                 "title": "GO cellular component",
-    #                 "legend": "",
-    #                 "type": "row_chart",
-    #                 "param": "GO cellular component",
-    #                 "id": "vIQ7Pg",
-    #                 "size": [372, 675],
-    #                 "axis": {
-    #                     "x": {
-    #                     "textSize": 13,
-    #                     "label": "",
-    #                     "size": 25,
-    #                     "tickfont": 10
-    #                     }
-    #                 },
-    #                 "show_limit": 40,
-    #                 "sort": "size",
-    #                 "position": [685, 0]
-    #             }
-    #         ]
-    #         }
-    #     }
-    # }
     return JsonResponse(vw)
 
 
@@ -472,40 +388,40 @@ def datasources(request, tableid, conn=None, **kwargs):
     try:
         cols = t.getHeaders()
         row_count = t.getNumberOfRows()
-    finally:
-        t.close()
 
-    cols_data = []
+        cols_data = []
 
-    col_types = {
-        "ImageColumn": "integer",
-        "WellColumn": "integer",
-        "StringColumn": "text",
-        "LongColumn": "integer",
-        "DoubleColumn": "double"
-    }
-
-    for col in cols:
-        colclass = col.__class__.__name__
-        col_data = {
-            "datatype": col_types[colclass],
-            "name": col.name,   # display name
-            "field": col.name,  # col name
-            # "is_url": True,
+        col_types = {
+            "ImageColumn": "integer",
+            "WellColumn": "integer",
+            "StringColumn": "text",
+            "LongColumn": "integer",
+            "DoubleColumn": "double"
         }
 
-        # for 'text' columns, we want to get all the values
-        #    "values": ["A", "B", "C"]
-        # for integer & double, we want 
-        #     "minMax": [2125613, 2147448],
-        #     "quantiles": {
-        #         "0.001": [2129988.88, 2147415.64],
-        #         "0.01": [2137765.6, 2144999.6000000006],
-        #         "0.05": [2137823, 2140299]
-        #     }
-        # }
+        for column_index, col in enumerate(cols):
+            colclass = col.__class__.__name__
+            col_data = {
+                "datatype": col_types[colclass],
+                "name": col.name,   # display name
+                "field": col.name,  # col name
+                # "is_url": True,
+            }
 
-        cols_data.append(col_data)
+            if col_data["datatype"] == "text":
+                # we want to get all the values
+                values = get_column_values(t, column_index)
+                indices, vals = get_text_indices(values)
+                print('indices, vals', indices, vals)
+                col_data["values"] = vals
+
+                # DEBUG: with this, we get the values (indices rendered correctly)
+                # but without it, we get invalid text values
+                col_data["datatype"] = "integer"
+
+            cols_data.append(col_data)
+    finally:
+        t.close()
 
     ds = [
         {
