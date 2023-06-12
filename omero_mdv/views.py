@@ -242,13 +242,15 @@ def views(request, tableid, conn=None, **kwargs):
         raise Http404("Table %s not found" % tableid)
 
     image_col = None
+    image_col_index = -1
     try:
         cols = t.getHeaders()
         column_names = [col.name for col in cols]
         number_cols = [col for col in cols if col.__class__.__name__ in ("LongColumn", "DoubleColumn")]
-        for col in cols:
+        for idx, col in enumerate(cols):
             if col.__class__.__name__ == "ImageColumn":
                 image_col = col
+                image_col_index = idx
     finally:
         t.close()
 
@@ -337,7 +339,7 @@ def views(request, tableid, conn=None, **kwargs):
         "image": {
             "base_url": "./image/",
             "type": "png",
-            "param": 0
+            "param": image_col_index
         },
         "id": "XulQsf",
          "size": [
