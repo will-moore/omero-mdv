@@ -158,14 +158,18 @@ def get_column_bytes(table, column_index):
     values = get_column_values(table, column_index)
     dt = np.dtype(type(values[0]))
     # if string, the values we want are indices
-    print('dt str', dt == str)
     if dt == str:
         indices, vals = get_text_indices(values)
+        # Column 'text' type is OK for up to 256 values
+        # TODO: support other column types
+        # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype---text
         values = indices
-        print("strig indices, vals", indices, vals)
+        dt = np.int8
+    else:
+        dt = np.float32
 
-    # MDV expects float32 encoding
-    arr = np.array(values, np.float32)
+    # MDV expects float32 encoding for numbers
+    arr = np.array(values, dt)
     comp = gzip.compress(arr.tobytes())
 
     return comp
