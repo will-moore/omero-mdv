@@ -3,7 +3,7 @@
 OMERO.web plugin to add [Multi-Dimensional Viewer](https://mdv.molbiol.ox.ac.uk/)
 to the OMERO-web framework.
 
-NB: Currently this is a very early experimental app.
+NB: Currently this is a very early experimental app. It allows you to choose a single OMERO.table attached to a Project or Dataset using the "Open with... MDV" menu.
 
 Screenshot showing data from [idr0021](https://idr.openmicroscopy.org/webclient/?show=project-51)
 displaying analysis results prepared for a [training workshop](https://omero-guides.readthedocs.io/en/latest/parade/docs/omero_parade.html).
