@@ -4,6 +4,7 @@ import gzip
 import numpy as np
 import pandas as pd
 import re
+import json
 from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.shortcuts import render
@@ -16,6 +17,7 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 
 from django.conf import settings
 
+from .utils import get_mdv_ann, add_mdv_ann
 
 # Ensure that middleware gets added
 HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
@@ -111,11 +113,20 @@ def state(request, tableid, conn=None, **kwargs):
     return JsonResponse(st)
 
 
-@login_required()
-def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
-    # For each column, we need to get the number of bytes for the column
-    # For now, we convert column into bytes and get size...
+def _table_cols_byte_offsets(tableid, conn, clear_cache=False):
+    """Returns a dict of {'col_name': [start_byte, end_byte]}"""
 
+    # check for cached values as an Annotation
+    ann = get_mdv_ann(conn, tableid)
+    if ann is not None:
+        if clear_cache:
+            conn.deleteObjects("Annotation", [ann["id"]])
+            return {"cache_cleared": "True"}
+        else:
+            return json.loads(ann["textValue"])
+
+    # For each column, we need to get the number of bytes for the column
+    # Convert each column into bytes and get size...
     r = conn.getSharedResources()
     t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
     if not t:
@@ -137,7 +148,16 @@ def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
     finally:
         t.close()
 
-    return JsonResponse(col_byte_offsets)
+    # cache
+    add_mdv_ann(conn, tableid, json.dumps(col_byte_offsets))
+
+    return col_byte_offsets
+
+
+@login_required()
+def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
+    clear_cache = request.GET.get('clear_cache') is not None
+    return JsonResponse(_table_cols_byte_offsets(tableid, conn, clear_cache))
 
 
 def get_text_indices(values):
@@ -178,74 +198,45 @@ def get_column_bytes(table, column_index):
 @login_required()
 def table_bytes(request, tableid, conn=None, **kwargs):
 
-    range_header = request.headers['Range']
+    # get dict of {"col_name": [start, end]}
+    byte_offsets = _table_cols_byte_offsets(tableid, conn)
 
+    range_header = request.headers['Range']
 
     m = re.search('(\d+)-(\d*)', range_header)
     g = m.groups()
 
-    if g[0]:
-        byte1 = int(g[0])
-    if g[1]:
-        byte2 = int(g[1])
+    byte1 = int(g[0]) if g[0] else None
+    byte2 = int(g[1]) if g[1] else None
+
+    if byte1 is None or byte2 is None:
+        raise Http404("No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
+    size = byte2 - byte1
 
     r = conn.getSharedResources()
     t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
     if not t:
         raise Http404("Table %s not found" % tableid)
 
-    offset = 0
-
-    size = 100000  # FIXME!
-    column_bytes = b""
-    # length = 0
     try:
         # We have to go though each column until we reach the offset
         cols = t.getHeaders()
         for column_index, col in enumerate(cols):
             column_name = col.name
-
-            col_bytes = get_column_bytes(t, column_index)
-            bytes_length = len(col_bytes)
-
-            if offset == byte1:
-                column_bytes = col_bytes
-                break
-            else:
-                offset = offset + bytes_length
+            start_end = byte_offsets.get(column_name)
+            if start_end is not None and start_end[0] == byte1:
+                column_bytes = get_column_bytes(t, column_index)
     finally:
         t.close()
 
     rsp = HttpResponse(column_bytes, content_type="application/octet-stream")
     rsp['Content-Range'] = 'bytes {0}-{1}/{2}'.format(byte1, byte2, size)
     rsp['Accept-Ranges'] = 'bytes'
-
-    # headers to allow SharedArrayBuffer
-    rsp["Cross-Origin-Opener-Policy"] = "same-origin"
-    rsp["Cross-Origin-Embedder-Policy"] = "require-corp"
     return rsp
 
-# def get_range(file_name,range_header):
-#     file =open(file_name,"rb")
-#     size = sys.getsizeof(file_name)
-#     byte1, byte2 = 0, None
-
-#     
-
-#     file.seek(byte1)
-#     data = file.read(length)
-#     rv = Response(data,
-#                 206,
-#                 mimetype=mimetypes.guess_type(file_name)[0],
-#                 direct_passthrough=True)
-#     rv.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte1 + length - 1, size))
-#     rv.headers.add('Accept-Ranges', 'bytes')
-#     file.close()
-#     return rv
 
 @login_required()
 def views(request, tableid, conn=None, **kwargs):
-
 
     # only offer a single view initially...
     views = []
@@ -382,7 +373,6 @@ def views(request, tableid, conn=None, **kwargs):
 @login_required()
 def datasources(request, tableid, conn=None, **kwargs):
 
-
     # open table and get columns...
     r = conn.getSharedResources()
     t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
@@ -416,7 +406,6 @@ def datasources(request, tableid, conn=None, **kwargs):
                 # we want to get all the values
                 values = get_column_values(t, column_index)
                 indices, vals = get_text_indices(values)
-                print('indices, vals', indices, vals)
                 col_data["values"] = vals
 
                 # DEBUG: with this, we get the values (indices rendered correctly)
