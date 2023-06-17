@@ -24,6 +24,8 @@ urlpatterns = [
     re_path(r"^config/(?P<configid>[0-9]+)/thumbnail/(?P<imageid>[0-9]+).png$", views.thumbnail),
     re_path(r"^config/(?P<configid>[0-9]+)/image/(?P<imageid>[0-9]+).png$", views.image),
 
+    re_path(r"^meths/execute_project_action/$", views.save_view),
+
     # Delegate all other requests from the viewer to statically-hosted files
     re_path(r'^(?P<url>.*)$', views.mdv_static, name='mdv_static'),
 ]

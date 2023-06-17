@@ -1,0 +1,1 @@
+import{inflate as r}from"./pako.esm-0a50cf5c.js";import{B as t}from"./obvios-27bd7269.js";import"./AnnotationDialogReact-6e70f00e.js";class d extends t{decodeBlock(e){return r(new Uint8Array(e)).buffer}}export{d as default};

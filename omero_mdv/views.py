@@ -9,6 +9,9 @@ from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonRespons
 from django.urls import reverse
 from django.shortcuts import render
 from django.templatetags.static import static
+from django.middleware.csrf import get_token
+from django.template.loader import render_to_string
+from django.views.decorators.http import require_POST
 
 import omero
 from omeroweb.decorators import login_required
@@ -86,8 +89,29 @@ def submit_form(request, conn=None, **kwargs):
 def index(request, **kwargs):
     """ Main MDV viewer page """
     # home page of the mdv app - return index.html
-    rsp = render(request, "mdv/index.html", {})
-    return rsp
+    # {% csrf_token %}
+    csrf_token = get_token(request)
+    print("csrf_token", csrf_token)
+    template = render_to_string("mdv/index.html", {}, request)
+    template = template.replace("</body>", "<script>window.CSRF_TOKEN='%s'</script></body>" % csrf_token)
+    # rsp = render(request, , {"CSRF_TOKEN": csrf_token})
+
+    return HttpResponse(template)
+
+
+# @require_POST
+@login_required()
+def save_view(request, **kwargs):
+
+    print("save view")
+
+    try:
+        json_data = json.loads(request.body)
+        print("json_data", json.dumps(json_data))
+    except Exception as ex:
+        return JsonResponse({"success": False, "Error": ex.message})
+
+    return JsonResponse({"success": True})
 
 
 def mdv_static(request, url):
@@ -108,7 +132,8 @@ def state(request, tableid, conn=None, **kwargs):
         "all_views":[
             "main",
         ],
-        "initial_view": "main"
+        "initial_view": "main",
+        "permission": "edit"
     }
     return JsonResponse(st)
 
