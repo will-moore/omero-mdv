@@ -11,6 +11,11 @@ urlpatterns = [
     re_path(r'^choose_data/$', views.choose_data, name='mdv_choose_data'),
     re_path(r'^submit_form/$', views.submit_form, name='mdv_submit_form'),
 
+    # page above loads table info via...
+    re_path(r'^table_info/(?P<tableid>[0-9]+)/$', views.table_info, name='mdv_table_info'),
+    # load map-annotations as if a table...
+    re_path(r'^mapann_info/(?P<projectid>[0-9]+)/$', views.mapann_info, name='mdv_mapann_info'),
+
     # MDV viewer
     # Currently we don't save configs, so a config ID is really an OMERO.table ID
     re_path(r"^config/(?P<tableid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),

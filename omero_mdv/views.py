@@ -1,5 +1,6 @@
 
 
+from collections import defaultdict
 import gzip
 import numpy as np
 import pandas as pd
@@ -60,7 +61,109 @@ def choose_data(request, conn=None, **kwargs):
                 }
             })
 
-    return render(request, "mdv/choose_data.html", {"anns": anns})
+    context = {
+        "obj_id": obj_id,
+        "obj_type": obj_type,
+        "anns": anns
+    }
+    return render(request, "mdv/choose_data.html", context)
+
+
+@login_required()
+def mapann_info(request, projectid, conn=None, **kwargs):
+    # summarise map-annotations to display in a table
+
+    mapann_data = get_mapann_data(conn, projectid)
+
+    # summary for columns
+    # name and values for each column
+
+    columns = []
+
+    for col_name, id_vals in mapann_data.items():
+        columns.append(
+            {"name": col_name, "values": list(set(id_vals.values()))}
+        )
+    return JsonResponse({"columns": columns})
+
+
+def get_mapann_data(conn, projectid):
+    qs = conn.getQueryService()
+    params = omero.sys.ParametersI()
+    params.addId(projectid)
+
+    query = """select ilink from ImageAnnotationLink as ilink
+            left outer join fetch ilink.child as ch
+            left outer join fetch ilink.parent as img
+            left outer join fetch img.datasetLinks as dlink
+            join fetch dlink.parent as dataset
+            left outer join fetch dataset.projectLinks as plink
+            join fetch plink.parent as project
+            where project.id=:id
+            and ch.class=MapAnnotation"""
+    
+    result = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
+
+    # need {key: {iid: value} }
+    kv_pairs = defaultdict(dict)
+    for annLink in result:
+        ann = annLink.child
+        img = annLink.parent
+        for kv in ann.mapValue:
+            kv_pairs[kv.name][img.id.val] = kv.value
+    return kv_pairs
+
+
+@login_required()
+def table_info(request, tableid, conn=None, **kwargs):
+
+    # open table and get columns...
+    r = conn.getSharedResources()
+    t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
+    if not t:
+        raise Http404("Table %s not found" % tableid)
+
+    try:
+        cols = t.getHeaders()
+        row_count = t.getNumberOfRows()
+
+        cols_data = []
+
+        col_types = {
+            "ImageColumn": "integer",
+            "WellColumn": "integer",
+            "StringColumn": "text",
+            "LongColumn": "integer",
+            "DoubleColumn": "double"
+        }
+
+        offset = 0
+
+        for column_index, col in enumerate(cols):
+            colclass = col.__class__.__name__
+            col_data = {
+                "datatype": col_types[colclass],
+                "name": col.name,   # display name
+                "field": col.name,  # col name
+                # "is_url": True,
+            }
+
+            if col_data["datatype"] == "text":
+                # we want to get all the values
+                values = get_column_values(t, column_index)
+                indices, vals = get_text_indices(values)
+                col_data["values"] = vals
+
+            col_bytes = get_column_bytes(t, column_index)
+            bytes_length = len(col_bytes)
+            col_data['bytes'] = [offset, offset + bytes_length - 1]
+            offset = offset + bytes_length
+
+            cols_data.append(col_data)
+    finally:
+        t.close()
+    
+    return JsonResponse({'columns': cols_data})
 
 
 @login_required()
@@ -432,10 +535,6 @@ def datasources(request, tableid, conn=None, **kwargs):
                 values = get_column_values(t, column_index)
                 indices, vals = get_text_indices(values)
                 col_data["values"] = vals
-
-                # DEBUG: with this, we get the values (indices rendered correctly)
-                # but without it, we get invalid text values
-                # col_data["datatype"] = "integer"
 
             cols_data.append(col_data)
     finally:

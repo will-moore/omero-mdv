@@ -15,27 +15,142 @@
         height: 48px;
         flex: auto;
       }
+      main {
+        margin: 20px;
+      }
+      th {
+        font-weight: 100;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        vertical-align: top;
+        border: solid #ddd 1px;
+        padding: 5px;
+        border-collapse: collapse;
+      }
     </style>
   </head>
   <body>
     <header></header>
     <main>
-      <h2>Choose a table:</h2>
+      <h2>Choose data for {{obj_type}}-{{obj_id}}:</h2>
       <form method="post" action="{% url 'mdv_submit_form' %}">
         {% csrf_token %}
+        <h3>OMERO.tables</h3>
         <ul>
-          <!-- Currently use 'radio' - only support single Table, but can support multiple later -->
           {% for ann in anns %}
           <li>
             <label>
-              <input name="file" type="radio" value="{{ann.file.id}}" />
-              {{ann.file.name }}
+              <input name="file" type="checkbox" value="{{ann.file.id}}" />
+              File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
           </li>
           {% endfor %}
         </ul>
+
+        <label>
+          <input
+            id="mapAnnsCheckbox"
+            name="map_anns"
+            type="checkbox"
+            value="{{obj_type}}-{{obj_id}}"
+          />
+          Map Annotations
+        </label>
+
+        <br />
         <button type="submit">OK</button>
+
+        <hr />
+
+        <div id="datasources"></div>
       </form>
     </main>
   </body>
+
+  <script type="module">
+    let MDV_INDEX = "{% url 'mdv_index' %}";
+    let obj_type = "{{obj_type}}";
+    let obj_id = {{obj_id}};
+
+    import {html, render} from 'https://unpkg.com/lit-html?module';
+
+    // datasources is the data model - updated via AJAX when user updates form, then we render table
+    let datasources = {
+      // each table item is {id: {columns:[], etc} }
+      omero_tables: {},
+      // this object is also {columns:[], etc}
+      map_anns: {columns: [], display: false}
+    }
+
+
+    const tableTemplate = (columns) => html`
+      ${ columns.length == 0 ? "loading..." : ""}
+      <table><tbody>
+        <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
+        <tr>${columns.map((col) => html`<td>${col.values ? col.values.join(", ") : ""}</td>`)}</tr>
+      </tbody></table>
+    `;
+
+
+    const mainTemplate = (datasources) => html`
+
+      ${Object.values(datasources.omero_tables).map(t => t.display ? tableTemplate(t.columns) : html``)}
+
+      ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
+
+    `;
+
+    // Render the template to the document
+    function renderTable() {
+      console.log("rendering Table...", datasources);
+      render(mainTemplate(datasources), document.getElementById("datasources"));
+    }
+
+
+    // Handle click on Tables checkbox...
+    // document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
+    function handleTableClick(event) {
+      const checked = event.target.checked;
+      const tableId = event.target.value;
+      console.log("tableId", tableId);
+      // if data not loaded...
+      if (!datasources.omero_tables[tableId]) {
+        datasources.omero_tables[tableId] = {columns: [], display: false}
+      }
+      if (checked && !datasources.omero_tables[tableId]?.columns?.length > 0) {
+        let table_data = fetch(`${MDV_INDEX}table_info/${tableId}/`)
+          .then(rsp => rsp.json())
+          .then(data => {
+            console.log("data", data);
+            datasources.omero_tables[tableId].columns = data.columns;
+            renderTable();
+          })
+      }
+      datasources.omero_tables[tableId].display = checked;
+      renderTable();
+    };
+    document.querySelectorAll("input[name='file']").forEach(i => i.addEventListener("click", handleTableClick));
+
+  
+    // Handle click on Map Annotations checkbox...
+    document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
+      const checked = event.target.checked;
+      // if data not loaded...
+      if (checked && datasources.map_anns.columns.length == 0) {
+        let map_anns_data = fetch(`${MDV_INDEX}mapann_info/${obj_id}/`)
+          .then(rsp => rsp.json())
+          .then(data => {
+            console.log("data", data);
+            datasources.map_anns.columns = data.columns;
+            renderTable();
+          })
+      }
+      datasources.map_anns.display = checked;
+      renderTable();
+    });
+  </script>
 </html>
