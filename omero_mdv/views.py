@@ -2,6 +2,9 @@
 
 from collections import defaultdict
 import gzip
+from datetime import datetime
+import time
+from io import BytesIO
 import numpy as np
 import pandas as pd
 import re
@@ -16,12 +19,14 @@ from django.views.decorators.http import require_POST
 
 import omero
 from omeroweb.decorators import login_required
-from omero.rtypes import unwrap
+from omero.rtypes import unwrap, wrap
 from omeroweb.webgateway.views import render_thumbnail, render_image
 
 from django.conf import settings
 
 from .utils import get_mdv_ann, add_mdv_ann
+
+JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
 # Ensure that middleware gets added
 HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
@@ -62,8 +67,7 @@ def choose_data(request, conn=None, **kwargs):
             })
 
     context = {
-        "obj_id": obj_id,
-        "obj_type": obj_type,
+        "obj": {"id": obj_id, "type": obj_type, "name": obj.name},
         "anns": anns
     }
     return render(request, "mdv/choose_data.html", context)
@@ -71,6 +75,69 @@ def choose_data(request, conn=None, **kwargs):
 
 @login_required()
 def mapann_info(request, projectid, conn=None, **kwargs):
+    return JsonResponse(_mapann_info(conn, projectid))
+
+
+@login_required()
+def list_mdv_configs(request, conn=None, **kwargs):
+
+    params = omero.sys.ParametersI()
+    params.addString('ns', wrap(JSON_FILEANN_NS))
+    q = """select new map(obj.id as id,
+                obj.description as desc,
+                o.id as owner_id,
+                o.firstName as firstName,
+                o.lastName as lastName,
+                e.time as time,
+                f.name as name,
+                f.id as file_id,
+                g.id as group_id,
+                g.name as group_name,
+                obj as obj_details_permissions)
+            from FileAnnotation obj
+            join obj.details.group as g
+            join obj.details.owner as o
+            join obj.details.creationEvent as e
+            join obj.file.details as p
+            join obj.file as f where obj.ns=:ns"""
+
+    qs = conn.getQueryService()
+    file_anns = qs.projection(q, params, conn.SERVICE_OPTS)
+    rsp = []
+    for file_ann in file_anns:
+        fa = unwrap(file_ann[0])
+        date = datetime.fromtimestamp(unwrap(fa['time'])/1000)
+        first_name = unwrap(fa['firstName'])
+        last_name = unwrap(fa['lastName'])
+        fig_file = {
+            'id': unwrap(fa['id']),
+            'file': {
+                'id': unwrap(fa['file_id']),
+                'name': unwrap(fa['name']),
+            },
+            'description': unwrap(fa['desc']),
+            'ownerFullName': "%s %s" % (first_name, last_name),
+            'owner': {
+                'id': fa['owner_id'],
+                'firstName': fa['firstName'],
+                'lastName': fa['lastName']
+            },
+            'group': {
+                'id': fa['group_id'],
+                'name': fa['group_name']
+            },
+            'creationDate': time.mktime(date.timetuple()),
+            'formattedDate': str(date.strftime('%a %d %b %Y, %I:%M%p')),
+            'canEdit': fa['obj_details_permissions'].get('canEdit')
+        }
+        rsp.append(fig_file)
+
+    context = {"configs": rsp}
+    # return JsonResponse(context)
+    return render(request, "mdv/configs.html", context)
+
+
+def _mapann_info(conn, projectid):
     # summarise map-annotations to display in a table
 
     mapann_data = get_mapann_data(conn, projectid)
@@ -84,7 +151,8 @@ def mapann_info(request, projectid, conn=None, **kwargs):
         columns.append(
             {"name": col_name, "values": list(set(id_vals.values()))}
         )
-    return JsonResponse({"columns": columns})
+    columns.sort(key=lambda col: col["name"])
+    return {"columns": columns}
 
 
 def get_mapann_data(conn, projectid):
@@ -116,7 +184,10 @@ def get_mapann_data(conn, projectid):
 
 @login_required()
 def table_info(request, tableid, conn=None, **kwargs):
+    return JsonResponse(_table_info(conn, tableid))
 
+
+def _table_info(conn, tableid):
     # open table and get columns...
     r = conn.getSharedResources()
     t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
@@ -163,25 +234,77 @@ def table_info(request, tableid, conn=None, **kwargs):
     finally:
         t.close()
     
-    return JsonResponse({'columns': cols_data})
+    return {'columns': cols_data, "row_count": row_count}
 
 
 @login_required()
 def submit_form(request, conn=None, **kwargs):
+    if not request.method == 'POST':
+        return HttpResponse("Need to use POST")
 
     # Handle form data from index page 
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
-    file_id = request.POST.get("file")
+    file_ids = request.POST.getlist("file")
+    kvp_parent = request.POST.get("map_anns")
+    mdv_name = request.POST.get("mdv_name")
 
-    url = reverse("mdv_index")
-    config_url = "config/" + file_id + "/"
+    print("file_ids", file_ids, "kvp_parent", kvp_parent, "mdv_name", mdv_name)
+
+    # Load data to compile our MDV config file
+    file_ids = [int(fid) for fid in file_ids]
+    file_ids.sort()
+
+    group_id = None
+    datasrcs = {}
+    if len(file_ids) > 0:
+        datasrcs["omero_tables"] = []
+    
+    for table_id in file_ids:
+        tdata = _table_info(conn, table_id)
+        group_id = conn.getObject("OriginalFile", table_id).getDetails().group.id.val
+        datasrcs["omero_tables"].append({
+            "file_id": table_id,
+            "columns": tdata["columns"]
+        })
+
+    if kvp_parent is not None:
+        obj_id = int(kvp_parent.split("-")[1])
+        # TODO: support other Object types
+        if kvp_parent.startswith("project-"):
+            if group_id is None:
+                group_id = conn.getObject("Project", obj_id).getDetails().group.id.val
+            mapann_data = _mapann_info(conn, obj_id)
+            datasrcs["map_anns"] = {
+                "parent_type": "project",
+                "parent_id": obj_id,
+                "columns": mapann_data["columns"]
+            }
+
+    if group_id is None:
+        return JsonResponse({"Error": "No data chosen"})
+    conn.SERVICE_OPTS.setOmeroGroup(group_id)
+    config_json = json.dumps(datasrcs, indent=2)
+
+    # Save JSON to file annotation...
+    update = conn.getUpdateService()
+    config_json = config_json.encode('utf8')
+    # Create new file
+    file_size = len(config_json)
+    f = BytesIO()
+    f.write(config_json)
+    orig_file = conn.createOriginalFileFromFileObj(
+        f, '', mdv_name, file_size, mimetype="application/json")
+    # wrap it with File-Annotation to make it findable by NS etc.
+    fa = omero.model.FileAnnotationI()
+    fa.setFile(omero.model.OriginalFileI(orig_file.getId(), False))
+    fa.setNs(wrap(JSON_FILEANN_NS))
+    fa = update.saveAndReturnObject(fa, conn.SERVICE_OPTS)
+    ann_id = fa.getId().getValue()
 
     # redirect to app, with absolute config URL...
-    # Fails due to app at https not loading from dev omero-web (http)
-    # url = MDV_APP
-    # config_url = request.build_absolute_uri(reverse("mdv_urls", args=["config"]))
-    # config_url = config_url + file_id + "/"
+    url = reverse("mdv_index")
+    config_url = f"config/{ann_id}/"
 
     return HttpResponseRedirect("%s?dir=%s" % (url, config_url))
 
@@ -498,8 +621,63 @@ def views(request, tableid, conn=None, **kwargs):
     return JsonResponse(vw)
 
 
+def _config_json(conn, fileid):
+    file_ann = conn.getObject("FileAnnotation", fileid)
+    if file_ann is None:
+        raise Http404("File-Annotation %s not found" % fileid)
+    mdv_json = b"".join(list(file_ann.getFileInChunks()))
+    mdv_json = mdv_json.decode('utf8')
+    print("mdv_json", mdv_json)
+    # parse the json, so we can add info...
+    config_json = json.loads(mdv_json)
+    return config_json
+
+
 @login_required()
-def datasources(request, tableid, conn=None, **kwargs):
+def config_json(request, configid, conn=None, **kwargs):
+    config_json = _config_json(conn, configid)
+    return JsonResponse(config_json, safe=False)
+
+
+@login_required()
+def datasources(request, configid, conn=None, **kwargs):
+
+    # Load
+    config_json = _config_json(conn, configid)
+
+    # We want to compile columns from all Tables, KVPs etc. 
+    columns = []
+
+    row_count = 1000
+    for table_json in config_json["omero_tables"]:
+        columns.extend(table_json["columns"])
+
+    ds = [
+        {
+            # This name will generate URL to load values
+            "name": "mdv_config_%s" % configid,
+            "size": row_count,
+            "images": {
+            "composites": {
+                "base_url": "./images/",
+                "type": "png",
+                "key_column": "Image"
+            }
+            },
+            "large_images": {
+            "composites": {
+                "base_url": "./images/",
+                "type": "png",
+                "key_column": "Image"
+            }
+            },
+            "columns": columns
+        }
+    ]
+    return JsonResponse(ds, safe=False)
+
+
+def table_datasources(request, tableid, conn=None, **kwargs):
 
     # open table and get columns...
     r = conn.getSharedResources()

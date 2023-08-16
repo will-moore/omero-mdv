@@ -17,8 +17,12 @@ urlpatterns = [
     re_path(r'^mapann_info/(?P<projectid>[0-9]+)/$', views.mapann_info, name='mdv_mapann_info'),
 
     # MDV viewer
-    # Currently we don't save configs, so a config ID is really an OMERO.table ID
-    re_path(r"^config/(?P<tableid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),
+    re_path(r"^config/(?P<configid>[0-9]+)/json/$", views.config_json, name='mdv_config_json'),
+    # save configs, so a config ID is the FileAnnotation ID for JSON
+    re_path(r"^config/(?P<configid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),
+    # list configs
+    re_path(r'^config/$', views.list_mdv_configs),
+    
     re_path(r"^config/(?P<tableid>[0-9]+)/state.json$", views.state, name='mdv_state'),
     re_path(r"^config/(?P<tableid>[0-9]+)/views.json$", views.views, name='mdv_views'),
 

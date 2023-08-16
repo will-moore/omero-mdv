@@ -36,9 +36,10 @@
   <body>
     <header></header>
     <main>
-      <h2>Choose data for {{obj_type}}-{{obj_id}}:</h2>
+      <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
       <form method="post" action="{% url 'mdv_submit_form' %}">
         {% csrf_token %}
+        <label>MDV Project name: <input name="mdv_name" value="{{obj.name}}"/></label>
         <h3>OMERO.tables</h3>
         <ul>
           {% for ann in anns %}
@@ -47,6 +48,7 @@
               <input name="file" type="checkbox" value="{{ann.file.id}}" />
               File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
+            <a target="_blank" href="{% url 'omero_table' ann.file.id %}">View Table</a>
           </li>
           {% endfor %}
         </ul>
@@ -56,7 +58,7 @@
             id="mapAnnsCheckbox"
             name="map_anns"
             type="checkbox"
-            value="{{obj_type}}-{{obj_id}}"
+            value="{{obj.type}}-{{obj.id}}"
           />
           Map Annotations
         </label>
@@ -73,8 +75,8 @@
 
   <script type="module">
     let MDV_INDEX = "{% url 'mdv_index' %}";
-    let obj_type = "{{obj_type}}";
-    let obj_id = {{obj_id}};
+    let obj_type = "{{obj.type}}";
+    let obj_id = {{obj.id}};
 
     import {html, render} from 'https://unpkg.com/lit-html?module';
 
