@@ -24,11 +24,11 @@ urlpatterns = [
     re_path(r'^config/$', views.list_mdv_configs),
     
     re_path(r"^config/(?P<tableid>[0-9]+)/state.json$", views.state, name='mdv_state'),
-    re_path(r"^config/(?P<tableid>[0-9]+)/views.json$", views.views, name='mdv_views'),
+    re_path(r"^config/(?P<configid>[0-9]+)/views.json$", views.views, name='mdv_views'),
 
-    # We name a table datasource OMERO.table_ID, so we use that ID (ignore configid for now)
-    re_path(r"^config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),
-    re_path(r"^config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).b$", views.table_bytes),
+    # We name a table datasource mdv_config_ID, so we use that ID (ignore configid for now)
+    re_path(r"^config/(?P<configid>[0-9]+)/mdv_config_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),
+    re_path(r"^config/(?P<configid>[0-9]+)/mdv_config_(?P<tableid>[0-9]+).b$", views.table_bytes),
 
     re_path(r"^config/(?P<configid>[0-9]+)/thumbnail/(?P<imageid>[0-9]+).png$", views.thumbnail),
     re_path(r"^config/(?P<configid>[0-9]+)/image/(?P<imageid>[0-9]+).png$", views.image),

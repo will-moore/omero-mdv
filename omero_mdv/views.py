@@ -364,51 +364,31 @@ def state(request, tableid, conn=None, **kwargs):
     return JsonResponse(st)
 
 
-def _table_cols_byte_offsets(tableid, conn, clear_cache=False):
+def _table_cols_byte_offsets(configid, conn, clear_cache=False):
     """Returns a dict of {'col_name': [start_byte, end_byte]}"""
+    
+    # Load
+    config_json = _config_json(conn, configid)
 
-    # check for cached values as an Annotation
-    ann = get_mdv_ann(conn, tableid)
-    if ann is not None:
-        if clear_cache:
-            conn.deleteObjects("Annotation", [ann["id"]])
-            return {"cache_cleared": "True"}
-        else:
-            return json.loads(ann["textValue"])
-
-    # For each column, we need to get the number of bytes for the column
-    # Convert each column into bytes and get size...
-    r = conn.getSharedResources()
-    t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
-    if not t:
-        raise Http404("Table %s not found" % tableid)
-
+    # {"col_name": [start, end]}
     col_byte_offsets = {}
     offset = 0
 
-    try:
-        cols = t.getHeaders()
-        for column_index, col in enumerate(cols):
-            column_name = col.name
-
-            col_bytes = get_column_bytes(t, column_index)
-            bytes_length = len(col_bytes)
-
-            col_byte_offsets[column_name] = [offset, offset + bytes_length - 1]
-            offset = offset + bytes_length
-    finally:
-        t.close()
-
-    # cache
-    add_mdv_ann(conn, tableid, json.dumps(col_byte_offsets))
+    # go through config to get bytes offsets for all columns
+    # We combine the columns for each table in the config...
+    for col in get_columns(config_json):
+        column_name = col["name"]
+        bytes_length = col["bytes"][1] - col["bytes"][0]
+        col_byte_offsets[column_name] = [offset, offset + bytes_length - 1]
+        offset = offset + bytes_length
 
     return col_byte_offsets
 
 
 @login_required()
-def table_cols_byte_offsets(request, tableid, conn=None, **kwargs):
+def table_cols_byte_offsets(request, configid, conn=None, **kwargs):
     clear_cache = request.GET.get('clear_cache') is not None
-    return JsonResponse(_table_cols_byte_offsets(tableid, conn, clear_cache))
+    return JsonResponse(_table_cols_byte_offsets(configid, conn, clear_cache))
 
 
 def get_text_indices(values):
@@ -447,13 +427,9 @@ def get_column_bytes(table, column_index):
 
 
 @login_required()
-def table_bytes(request, tableid, conn=None, **kwargs):
-
-    # get dict of {"col_name": [start, end]}
-    byte_offsets = _table_cols_byte_offsets(tableid, conn)
+def table_bytes(request, configid, conn=None, **kwargs):
 
     range_header = request.headers['Range']
-
     m = re.search('(\d+)-(\d*)', range_header)
     g = m.groups()
 
@@ -464,19 +440,45 @@ def table_bytes(request, tableid, conn=None, **kwargs):
         raise Http404("No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
     size = byte2 - byte1
 
+    # get data from config...
+    config_json = _config_json(conn, configid)
+
+    # need to find table_id and column index for requested bytes...
+    offset = 0
+    tableid = None
+    column_index = 0
+    # go through config to get bytes offsets for all columns
+    # We combine the columns for each table in the config...
+    for table_info in config_json["omero_tables"]:
+        column_index = 0
+        columns = table_info["columns"]
+        for count, col in enumerate(columns):
+            if offset == byte1:
+                tableid = table_info["file_id"]
+                column_index = count
+                break
+            bytes_length = col["bytes"][1] - col["bytes"][0]
+            offset = offset + bytes_length
+        if tableid is not None:
+            break
+
+    # TODO: THIS!
+    # Add data from Map Anntations if we have some...
+    # if "map_anns" in config_json:
+    #     columns = config_json["map_anns"]["columns"]
+    #     column_names.extend([col["name"] for col in columns])
+
+    # get dict of {"col_name": [start, end]}
+    # byte_offsets = _table_cols_byte_offsets(configid, conn)
+
+
     r = conn.getSharedResources()
     t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
     if not t:
         raise Http404("Table %s not found" % tableid)
 
     try:
-        # We have to go though each column until we reach the offset
-        cols = t.getHeaders()
-        for column_index, col in enumerate(cols):
-            column_name = col.name
-            start_end = byte_offsets.get(column_name)
-            if start_end is not None and start_end[0] == byte1:
-                column_bytes = get_column_bytes(t, column_index)
+        column_bytes = get_column_bytes(t, column_index)
     finally:
         t.close()
 
@@ -486,48 +488,58 @@ def table_bytes(request, tableid, conn=None, **kwargs):
     return rsp
 
 
+def get_columns(mdv_config):
+    # We combine the columns for each table in the config...
+    # Making sure we avoid duplicate names/fields
+    columns = []
+    column_names = []
+    for table_info in mdv_config["omero_tables"]:
+        for col in table_info["columns"]:
+            colname = col["name"]
+            increment= 1
+            while colname in column_names:
+                colname = col["name"] + f"{len(column_names)}"
+                increment += 1
+            col["name"] = colname
+            col["field"] = colname
+            columns.append(col)
+            column_names.append(col["name"])
+    
+    # Add data from Map Anntations if we have some...
+    # if "map_anns" in mdv_config:
+    #     columns.extend(mdv_config["map_anns"]["columns"][:])
+
+    return columns
+
+
 @login_required()
-def views(request, tableid, conn=None, **kwargs):
+def views(request, configid, conn=None, **kwargs):
 
-    # only offer a single view initially...
-    views = []
-
-    r = conn.getSharedResources()
-    t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
-    if not t:
-        raise Http404("Table %s not found" % tableid)
-
-    image_col = None
-    image_col_index = -1
-    try:
-        cols = t.getHeaders()
-        column_names = [col.name for col in cols]
-        number_cols = [col for col in cols if col.__class__.__name__ in ("LongColumn", "DoubleColumn")]
-        for idx, col in enumerate(cols):
-            if col.__class__.__name__ == "ImageColumn":
-                image_col = col
-                image_col_index = idx
-    finally:
-        t.close()
+    # Load
+    config_json = _config_json(conn, configid)
 
     pos_x = 0
     pos_y = 0
-    chart_width = 300
+    chart_width = 1000
     chart_height = 500
     gap = 10
 
-    col_widths = {}
+    views = []
+    column_names = []
 
-    for name in column_names:
-        col_widths[name] = len(name) * 10
+    columns = get_columns(config_json)
+    column_names = [col["name"] for col in columns]
 
     # lets add a table...
+    col_widths = {}
+    for name in column_names:
+        col_widths[name] = len(name) * 10
     views.append({
         "title": "Table",
         "legend": "Some table data",
         "type": "table_chart",
         "param": column_names,
-        "id": "table_chart_%s" % tableid,
+        "id": "table_chart_%s" % configid,
         "size": [
             chart_width,
             chart_height
@@ -542,79 +554,79 @@ def views(request, tableid, conn=None, **kwargs):
 
 
     # If we have multiple number columns, add Scatter Plot...
-    if len(number_cols) > 1:
-        views.append({
-            "type":"wgl_scatter_plot",
-            "title":"Scatter Plot",
-            "param":[
-                number_cols[0].name,
-                number_cols[1].name
-            ],
-            "size": [
-                chart_width,
-                chart_height
-            ],
-            "position": [
-                pos_x,
-                pos_y
-            ]
-        })
-        pos_x = pos_x + chart_width + gap
+    # if len(number_cols) > 1:
+    #     views.append({
+    #         "type":"wgl_scatter_plot",
+    #         "title":"Scatter Plot",
+    #         "param":[
+    #             number_cols[0].name,
+    #             number_cols[1].name
+    #         ],
+    #         "size": [
+    #             chart_width,
+    #             chart_height
+    #         ],
+    #         "position": [
+    #             pos_x,
+    #             pos_y
+    #         ]
+    #     })
+    #     pos_x = pos_x + chart_width + gap
 
 
-    if image_col:
-        views.append({
-            # Thumbnails to show filtered images
-            "title": "Thumbnails",
-            "legend": "",
-            "type": "image_table_chart",
-            "param": [image_col.name],
-            "images": {
-                "base_url": "./thumbnail/",
-                "type": "png"
-            },
-            "id": "6qxshC",
-            "size": [
-                chart_width,
-                chart_height
-            ],
-            "image_width": 96,
-            "position": [
-                pos_x,
-                pos_y
-            ]
-        })
-        pos_x = pos_x + chart_width + gap
+    # if image_col:
+    #     views.append({
+    #         # Thumbnails to show filtered images
+    #         "title": "Thumbnails",
+    #         "legend": "",
+    #         "type": "image_table_chart",
+    #         "param": [image_col.name],
+    #         "images": {
+    #             "base_url": "./thumbnail/",
+    #             "type": "png"
+    #         },
+    #         "id": "6qxshC",
+    #         "size": [
+    #             chart_width,
+    #             chart_height
+    #         ],
+    #         "image_width": 96,
+    #         "position": [
+    #             pos_x,
+    #             pos_y
+    #         ]
+    #     })
+    #     pos_x = pos_x + chart_width + gap
 
-    # Show a summary - selected Image (if we have Images)
-    views.append({
-        "title": "Summary",
-        "legend": "",
-        "type": "row_summary_box",
-        "param": column_names,
-        "image": {
-            "base_url": "./image/",
-            "type": "png",
-            "param": image_col_index
-        },
-        "id": "XulQsf",
-         "size": [
-            chart_width,
-            chart_height
-        ],
-        "image_width": chart_width,
-        "position": [
-            pos_x,
-            pos_y
-        ]
-    })
-    pos_x = pos_x + chart_width + gap
+    # # Show a summary - selected Image (if we have Images)
+    # views.append({
+    #     "title": "Summary",
+    #     "legend": "",
+    #     "type": "row_summary_box",
+    #     "param": column_names,
+    #     "image": {
+    #         "base_url": "./image/",
+    #         "type": "png",
+    #         "param": image_col_index
+    #     },
+    #     "id": "XulQsf",
+    #      "size": [
+    #         chart_width,
+    #         chart_height
+    #     ],
+    #     "image_width": chart_width,
+    #     "position": [
+    #         pos_x,
+    #         pos_y
+    #     ]
+    # })
+    # pos_x = pos_x + chart_width + gap
 
 
     vw = {
         "main": {
             "initialCharts": {
-                "OMERO.table_%s" % tableid: views
+                "mdv_config_%s" % configid: views
             }
         }
     }
@@ -649,8 +661,8 @@ def datasources(request, configid, conn=None, **kwargs):
     columns = []
 
     row_count = 1000
-    for table_json in config_json["omero_tables"]:
-        columns.extend(table_json["columns"])
+
+    columns = get_columns(config_json)
 
     ds = [
         {
