@@ -7,8 +7,15 @@
         display: flex;
         flex-direction: column;
       }
+      h2, h3 {
+        font-weight: 400;
+      }
+      h2 {
+        margin: 0 0 10px 0;
+      }
       ul {
         list-style: none;
+        padding: 0;
       }
       header {
         background: #333;
@@ -31,13 +38,28 @@
         padding: 5px;
         border-collapse: collapse;
       }
+      form {
+        border: solid #ddd 1px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        padding: 10px;
+        position: absolute;
+        top: 100px;
+        left: 50%;
+        width: 500px;
+        margin-left: -250px;
+      }
+      button[type="submit"] {
+        float: right;
+      }
     </style>
   </head>
   <body>
     <header></header>
     <main>
-      <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
       <form method="post" action="{% url 'mdv_submit_form' %}">
+        <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
         {% csrf_token %}
         <label>MDV Project name: <input name="mdv_name" value="{{obj.name}}"/></label>
         <h3>OMERO.tables</h3>
@@ -63,13 +85,12 @@
           Map Annotations
         </label>
 
-        <br />
+        <br/>
         <button type="submit">OK</button>
-
-        <hr />
-
-        <div id="datasources"></div>
       </form>
+      <div id="datasources">
+        <!-- lit-html adds <table> here -->
+      </div>
     </main>
   </body>
 
