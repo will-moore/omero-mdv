@@ -107,6 +107,7 @@
   </body>
 
   <script type="module">
+    let WEB_INDEX = "{% url 'webindex' %}";
     let MDV_INDEX = "{% url 'mdv_index' %}";
     let obj_type = "{{obj.type}}";
     let obj_id = {{obj.id}};
@@ -132,18 +133,25 @@
     let datasources = new DataModel();
 
 
-    const tableTemplate = (columns) => html`
-      ${ columns.length == 0 ? "loading..." : ""}
-      <table><tbody>
-        <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
-        <tr>${columns.map((col) => html`<td>${col.values ? col.values.join(", ") : ""}</td>`)}</tr>
-      </tbody></table>
-    `;
+    const tableTemplate = ({columns, rows}) => {
+      return html`
+        ${ columns.length == 0 ? "loading..." : ""}
+        <table>
+          <thead>
+          <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
+          </thead>
+          <tbody>
+            ${
+              rows ? rows.map(row => html`<tr>${row.map((val) => html`<td>${val}</td>`)}</tr>`) : html``
+            }
+        </tbody></table>
+      `;
+    }
 
 
     const mainTemplate = (datasources) => html`
 
-      ${Object.values(datasources.omero_tables).map(t => tableTemplate(t.columns))}
+      ${Object.values(datasources.omero_tables).map(t => tableTemplate(t))}
 
       ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
 
@@ -169,11 +177,16 @@
         datasources.addTable(tableId, {columns: [], display: false});
       }
       if (checked && !datasources.omero_tables[tableId]?.columns?.length > 0) {
-        let table_data = fetch(`${MDV_INDEX}table_info/${tableId}/`)
+        // http://localhost:4080/webclient/omero_table/2154/json/?limit=500&offset=0
+        let url = `${WEB_INDEX}omero_table/${tableId}/json/?limit=500&offset=0`;
+        // let url = `${MDV_INDEX}table_info/${tableId}/`
+        let table_data = fetch(url)
           .then(rsp => rsp.json())
           .then(data => {
             console.log("data", data);
-            datasources.addTable(tableId, data);
+            let tabledata = data.data;
+            let columns = tabledata.columns.map(c => {return {"name": c}});
+            datasources.addTable(tableId, {columns, rows: tabledata.rows});
             // renderTable();
           })
       }
