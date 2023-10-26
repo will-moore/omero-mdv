@@ -111,7 +111,9 @@
     let obj_type = "{{obj.type}}";
     let obj_id = {{obj.id}};
 
-    import {html, render} from 'https://unpkg.com/lit-html?module';
+    // NB: lit-html 3.0.0 available, but cdn broken just now!
+    // import {html, render} from 'https://unpkg.com/lit-html?module';
+    import {html, render} from '{% static "mdv/lit-html_2.8.0/lit-html.js" %}';
 
     // datasources is the data model - updated via AJAX when user updates form
     class DataModel extends EventTarget {
