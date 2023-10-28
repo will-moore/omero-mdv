@@ -22,6 +22,8 @@ displaying analysis results prepared for a [training workshop](https://omero-gui
 
     $ omero config append omero.web.open_with '["MDV", "mdv_choose_data", {"supported_objects": ["project", "dataset"]}]'
 
+    $ omero config append omero.web.ui.top_links '["MDV", "open_mdv", {"title": "Open Multi-Dimensional-Viewer", "target": "_blank"}]'
+
 ```
 
 # Headers

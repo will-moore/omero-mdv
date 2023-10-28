@@ -21,7 +21,7 @@ urlpatterns = [
     # save configs, so a config ID is the FileAnnotation ID for JSON
     re_path(r"^config/(?P<configid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),
     # list configs
-    re_path(r'^config/$', views.list_mdv_configs),
+    re_path(r'^open/$', views.list_mdv_configs, name="open_mdv"),
     
     re_path(r"^config/(?P<tableid>[0-9]+)/state.json$", views.state, name='mdv_state'),
     re_path(r"^config/(?P<configid>[0-9]+)/views.json$", views.views, name='mdv_views'),
