@@ -75,7 +75,40 @@ def choose_data(request, conn=None, **kwargs):
 
 @login_required()
 def mapann_info(request, projectid, conn=None, **kwargs):
-    return JsonResponse(_mapann_info(conn, projectid))
+    # for the 'choose_data' page, we don't load MDV formatted info...
+    # return JsonResponse(_mapann_info(conn, projectid))
+
+    # ...instead load data in {'iid': {'key': 'values'}}
+
+    params = omero.sys.ParametersI()
+    params.addId(projectid)
+    qs = conn.getQueryService()
+    q = """
+        select oal from ImageAnnotationLink as oal
+        left outer join fetch oal.child as ch
+        left outer join fetch oal.parent as image
+        left outer join image.datasetLinks as dsl
+        join dsl.parent as dataset
+        left outer join dataset.projectLinks as pl
+        join pl.parent as project
+        where ch.class=MapAnnotation
+        and project.id=:id
+    """
+    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
+    rsp = {}
+    keys = set()
+    for img_ann_link in results:
+        img_id = img_ann_link.parent.id.val
+        ann = img_ann_link.child
+        if img_id not in rsp:
+            rsp[img_id] = {}
+        
+        for kv in ann.getMapValue():
+            keys.add(kv.name)
+            rsp[img_id][kv.name] = kv.value
+    keys = list(keys)
+    keys.sort()
+    return JsonResponse({"data": rsp, "keys": keys})
 
 
 @login_required()

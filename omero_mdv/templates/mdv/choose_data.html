@@ -149,12 +149,9 @@
     }
 
 
+      // ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
     const mainTemplate = (datasources) => html`
-
       ${Object.values(datasources.omero_tables).map(t => tableTemplate(t))}
-
-      ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
-
     `;
 
     // Render the template to the document
@@ -205,9 +202,19 @@
         let map_anns_data = fetch(`${MDV_INDEX}mapann_info/${obj_id}/`)
           .then(rsp => rsp.json())
           .then(data => {
-            console.log("data", data);
-            datasources.map_anns.columns = data.columns;
-            renderTable();
+            console.log("rsp", data);
+            // Need 'columns' [{'name': "Name"}] and 'rows' 2D list
+            let columns = data.keys.map(c => {return {"name": c}});
+            let imgData = data.data;
+            // parseInt just so we can sort
+            let imgIds = Object.keys(imgData).map(k => parseInt(k));
+            imgIds.sort();
+            // each row starts with iid, followed by values for each column
+            let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid][c.name] || "")))
+            columns = [{"name": "Image"}].concat(columns);
+            // datasources.map_anns.columns = data.columns;
+            datasources.addTable(`map_anns_${obj_id}`, {columns, rows});
+            // renderTable();
           })
       }
       datasources.map_anns.display = checked;
