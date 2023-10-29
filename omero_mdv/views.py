@@ -24,7 +24,7 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 
 from django.conf import settings
 
-from .utils import get_mdv_ann, add_mdv_ann
+from .utils import get_mdv_ann, add_mdv_ann, update_file_ann
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -33,6 +33,11 @@ HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
 if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
     settings.MIDDLEWARE = settings.MIDDLEWARE + (HEADERS_MIDDLEWARE,)
 
+def charts_id(config_annid):
+    return f"mdv_config_{config_annid}"
+
+def get_ann_id(config_id):
+    return int(config_id.replace("mdv_config_", ""))
 
 @login_required()
 def choose_data(request, conn=None, **kwargs):
@@ -360,15 +365,26 @@ def index(request, **kwargs):
 
 # @require_POST
 @login_required()
-def save_view(request, **kwargs):
+def save_view(request, conn=None, **kwargs):
 
-    print("save view")
+    json_data = json.loads(request.body)
 
-    try:
-        json_data = json.loads(request.body)
-        print("json_data", json.dumps(json_data))
-    except Exception as ex:
-        return JsonResponse({"success": False, "Error": ex.message})
+    # We want to find the "view"
+    current_view = json_data["args"]["state"]["currentView"]
+    charts = json_data["args"]["state"]["view"]["initialCharts"]
+    # need to use "mdv_config_ID" to find the config FileAnnotation
+    for config_id, data in charts.items():
+        ann_id = get_ann_id(config_id)
+        # load FileAnnotation...
+        config_json = _config_json(conn, ann_id)
+        # we might not have "views" saved yet...
+        if "views" not in config_json:
+            config_json["views"] = {}
+
+        config_json["views"][current_view] = charts
+
+        config_txt = json.dumps(config_json, indent=2).encode('utf8')
+        update_file_ann(conn, ann_id, config_txt)
 
     return JsonResponse({"success": True})
 
@@ -385,13 +401,18 @@ def mdv_static(request, url):
 
 
 @login_required()
-def state(request, tableid, conn=None, **kwargs):
-    # only offer a single view initially...
+def state(request, configid, conn=None, **kwargs):
+
+    config_json = _config_json(conn, configid)
+
+    view_names = ["main"]
+
+    if "views" in config_json:
+        vjson = config_json["views"]
+        view_names = list(vjson.keys())
     st = {
-        "all_views":[
-            "main",
-        ],
-        "initial_view": "main",
+        "all_views": view_names,
+        "initial_view": "main" if "main" in view_names else view_names[0],
         "permission": "edit"
     }
     return JsonResponse(st)
@@ -551,6 +572,15 @@ def views(request, configid, conn=None, **kwargs):
     # Load
     config_json = _config_json(conn, configid)
 
+    # If views exist, simply return them...
+    if "views" in config_json:
+        rsp = {}
+        for view_id, charts in config_json["views"].items():
+            # main, etc
+            rsp[view_id] = {"initialCharts": charts}
+        return JsonResponse(rsp)
+
+    # ...otherwise generate an initial view from scratch...
     pos_x = 0
     pos_y = 0
     chart_width = 1000
@@ -659,7 +689,7 @@ def views(request, configid, conn=None, **kwargs):
     vw = {
         "main": {
             "initialCharts": {
-                "mdv_config_%s" % configid: views
+                charts_id(configid): views
             }
         }
     }

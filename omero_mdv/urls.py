@@ -23,7 +23,7 @@ urlpatterns = [
     # list configs
     re_path(r'^open/$', views.list_mdv_configs, name="open_mdv"),
     
-    re_path(r"^config/(?P<tableid>[0-9]+)/state.json$", views.state, name='mdv_state'),
+    re_path(r"^config/(?P<configid>[0-9]+)/state.json$", views.state, name='mdv_state'),
     re_path(r"^config/(?P<configid>[0-9]+)/views.json$", views.views, name='mdv_views'),
 
     # We name a table datasource mdv_config_ID, so we use that ID (ignore configid for now)
@@ -33,6 +33,7 @@ urlpatterns = [
     re_path(r"^config/(?P<configid>[0-9]+)/thumbnail/(?P<imageid>[0-9]+).png$", views.thumbnail),
     re_path(r"^config/(?P<configid>[0-9]+)/image/(?P<imageid>[0-9]+).png$", views.image),
 
+    # POST here when user hits "Save" button on MDV
     re_path(r"^meths/execute_project_action/$", views.save_view),
 
     # Delegate all other requests from the viewer to statically-hosted files
