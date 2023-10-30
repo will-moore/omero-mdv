@@ -79,6 +79,34 @@ def choose_data(request, conn=None, **kwargs):
 
 
 @login_required()
+def datasets_info(request, projectid, conn=None, **kwargs):
+    # load data in {'iid': {'Dataset': 'name'}}
+
+    params = omero.sys.ParametersI()
+    params.addId(projectid)
+    qs = conn.getQueryService()
+    q = """
+        select image from Image as image
+        left outer join fetch image.datasetLinks as dsl
+        join fetch dsl.parent as dataset
+        left outer join dataset.projectLinks as pl
+        join pl.parent as project where project.id=:id
+    """
+    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
+    rsp = {}
+    for img in results:
+        img_id = img.id.val
+        for dsl in img.copyDatasetLinks():
+            # print("Dsl", dsl)
+            print("Dsl", dsl.parent.name.val)
+        if img_id not in rsp:
+            rsp[img_id] = {}
+        # Don't handle case of Image in 2 Datasets
+        rsp[img_id]["Dataset Name"] = dsl.parent.name.val
+    return JsonResponse({"data": rsp, "keys": ["Dataset Name"]})
+
+
+@login_required()
 def mapann_info(request, projectid, conn=None, **kwargs):
     # for the 'choose_data' page, we don't load MDV formatted info...
     # return JsonResponse(_mapann_info(conn, projectid))

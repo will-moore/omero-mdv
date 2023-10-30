@@ -90,11 +90,22 @@
         <label>
           <input
             id="mapAnnsCheckbox"
-            name="map_anns"
+            name="mapann"
             type="checkbox"
             value="{{obj.type}}-{{obj.id}}"
           />
           Map Annotations
+        </label>
+        <br>
+
+        <label style="line-height: 40px;">
+          <input
+            id="datasetsCheckbox"
+            name="datasets"
+            type="checkbox"
+            value="{{obj.type}}-{{obj.id}}"
+          />
+          Datasets
         </label>
 
         <br />
@@ -184,22 +195,30 @@
             let tabledata = data.data;
             let columns = tabledata.columns.map(c => {return {"name": c}});
             datasources.addTable(tableId, {columns, rows: tabledata.rows});
-            // renderTable();
           })
       }
       datasources.omero_tables[tableId].display = checked;
-      // renderTable();
     };
     // bind click handler to omero.table checkboxes
     document.querySelectorAll("input[name='file']").forEach(i => i.addEventListener("click", handleTableClick));
 
 
-    // Handle click on Map Annotations checkbox...
-    document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
+    // Handle click on Map Annotations / Dataset checkboxes...
+    // Both these load data in the same format...
+    document.getElementById("mapAnnsCheckbox").addEventListener("click", loadDataSource);
+    document.getElementById("datasetsCheckbox").addEventListener("click", loadDataSource);
+
+    function loadDataSource (event) {
       const checked = event.target.checked;
+      let name = event.target.getAttribute("name");
       // if data not loaded...
+      const tableId = `${name}_${obj_id}`
+      if (!datasources.omero_tables[tableId]) {
+        datasources.addTable(tableId, {columns: [], display: false});
+      }
       if (checked && datasources.map_anns.columns.length == 0) {
-        let map_anns_data = fetch(`${MDV_INDEX}mapann_info/${obj_id}/`)
+        // name is 'mapann' or 'datasets'
+        let map_anns_data = fetch(`${MDV_INDEX}${name}_info/${obj_id}/`)
           .then(rsp => rsp.json())
           .then(data => {
             console.log("rsp", data);
@@ -212,13 +231,11 @@
             // each row starts with iid, followed by values for each column
             let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid][c.name] || "")))
             columns = [{"name": "Image"}].concat(columns);
-            // datasources.map_anns.columns = data.columns;
-            datasources.addTable(`map_anns_${obj_id}`, {columns, rows});
-            // renderTable();
+            datasources.addTable(tableId, {columns, rows});
           })
       }
       datasources.map_anns.display = checked;
       renderTable();
-    });
+    };
   </script>
 </html>
