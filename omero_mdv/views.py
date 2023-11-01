@@ -611,7 +611,7 @@ def views(request, configid, conn=None, **kwargs):
     # ...otherwise generate an initial view from scratch...
     pos_x = 0
     pos_y = 0
-    chart_width = 1000
+    chart_width = 500
     chart_height = 500
     gap = 10
 
@@ -620,6 +620,12 @@ def views(request, configid, conn=None, **kwargs):
 
     columns = get_columns(config_json)
     column_names = [col["name"] for col in columns]
+    image_col = None
+    for idx, col in enumerate(columns):
+        print(col["name"].lower())
+        if col["name"].lower() == "image":
+            image_col = col
+            image_col_index = idx
 
     # lets add a table...
     col_widths = {}
@@ -665,53 +671,54 @@ def views(request, configid, conn=None, **kwargs):
     #     pos_x = pos_x + chart_width + gap
 
 
-    # if image_col:
-    #     views.append({
-    #         # Thumbnails to show filtered images
-    #         "title": "Thumbnails",
-    #         "legend": "",
-    #         "type": "image_table_chart",
-    #         "param": [image_col.name],
-    #         "images": {
-    #             "base_url": "./thumbnail/",
-    #             "type": "png"
-    #         },
-    #         "id": "6qxshC",
-    #         "size": [
-    #             chart_width,
-    #             chart_height
-    #         ],
-    #         "image_width": 96,
-    #         "position": [
-    #             pos_x,
-    #             pos_y
-    #         ]
-    #     })
-    #     pos_x = pos_x + chart_width + gap
+    if image_col:
+        views.append({
+            # Thumbnails to show filtered images
+            "title": "Thumbnails",
+            "legend": "",
+            "type": "image_table_chart",
+            "param": [image_col["name"]],
+            "images": {
+                "base_url": "./thumbnail/",
+                "type": "png"
+            },
+            "id": "6qxshC",
+            "size": [
+                chart_width,
+                chart_height
+            ],
+            "image_width": 96,
+            "position": [
+                pos_x,
+                pos_y
+            ]
+        })
+        pos_x = pos_x + chart_width + gap
 
-    # # Show a summary - selected Image (if we have Images)
-    # views.append({
-    #     "title": "Summary",
-    #     "legend": "",
-    #     "type": "row_summary_box",
-    #     "param": column_names,
-    #     "image": {
-    #         "base_url": "./image/",
-    #         "type": "png",
-    #         "param": image_col_index
-    #     },
-    #     "id": "XulQsf",
-    #      "size": [
-    #         chart_width,
-    #         chart_height
-    #     ],
-    #     "image_width": chart_width,
-    #     "position": [
-    #         pos_x,
-    #         pos_y
-    #     ]
-    # })
-    # pos_x = pos_x + chart_width + gap
+    # Show a summary - selected Image (if we have Images)
+    if image_col:
+        views.append({
+            "title": "Summary",
+            "legend": "",
+            "type": "row_summary_box",
+            "param": column_names,
+            "image": {
+                "base_url": "./image/",
+                "type": "png",
+                "param": image_col_index
+            },
+            "id": "XulQsf",
+            "size": [
+                chart_width,
+                chart_height
+            ],
+            "image_width": chart_width,
+            "position": [
+                pos_x,
+                pos_y
+            ]
+        })
+        pos_x = pos_x + chart_width + gap
 
 
     vw = {
