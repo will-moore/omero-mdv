@@ -96,13 +96,11 @@ def datasets_info(request, projectid, conn=None, **kwargs):
     rsp = {}
     for img in results:
         img_id = img.id.val
-        for dsl in img.copyDatasetLinks():
-            # print("Dsl", dsl)
-            print("Dsl", dsl.parent.name.val)
         if img_id not in rsp:
             rsp[img_id] = {}
-        # Don't handle case of Image in 2 Datasets
-        rsp[img_id]["Dataset Name"] = dsl.parent.name.val
+        for dsl in img.copyDatasetLinks():
+            # Don't handle case of Image in 2 Datasets
+            rsp[img_id]["Dataset Name"] = dsl.parent.name.val
     return JsonResponse({"data": rsp, "keys": ["Dataset Name"]})
 
 
@@ -315,8 +313,6 @@ def submit_form(request, conn=None, **kwargs):
     kvp_parent = request.POST.get("map_anns")
     mdv_name = request.POST.get("mdv_name")
 
-    print("file_ids", file_ids, "kvp_parent", kvp_parent, "mdv_name", mdv_name)
-
     # Load data to compile our MDV config file
     file_ids = [int(fid) for fid in file_ids]
     file_ids.sort()
@@ -381,12 +377,9 @@ def submit_form(request, conn=None, **kwargs):
 def index(request, **kwargs):
     """ Main MDV viewer page """
     # home page of the mdv app - return index.html
-    # {% csrf_token %}
     csrf_token = get_token(request)
-    print("csrf_token", csrf_token)
     template = render_to_string("mdv/index.html", {}, request)
     template = template.replace("</body>", "<script>window.CSRF_TOKEN='%s'</script></body>" % csrf_token)
-    # rsp = render(request, , {"CSRF_TOKEN": csrf_token})
 
     return HttpResponse(template)
 
@@ -622,7 +615,6 @@ def views(request, configid, conn=None, **kwargs):
     column_names = [col["name"] for col in columns]
     image_col = None
     for idx, col in enumerate(columns):
-        print(col["name"].lower())
         if col["name"].lower() == "image":
             image_col = col
             image_col_index = idx
@@ -737,7 +729,6 @@ def _config_json(conn, fileid):
         raise Http404("File-Annotation %s not found" % fileid)
     mdv_json = b"".join(list(file_ann.getFileInChunks()))
     mdv_json = mdv_json.decode('utf8')
-    print("mdv_json", mdv_json)
     # parse the json, so we can add info...
     config_json = json.loads(mdv_json)
     return config_json
