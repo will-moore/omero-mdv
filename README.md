@@ -13,6 +13,17 @@ displaying analysis results prepared for a [training workshop](https://omero-gui
 
 # Install
 
+Currently this has only been tested running on OMERO.web development server (see below).
+This requires `omero-py`. See instructions at https://github.com/ome/omero-py to create
+your python environment. Then, in the same python environment:
+
+```
+    $ git clone https://github.com/ome/omero-web
+    $ cd omero-web
+    $ pip install -e .
+```
+
+Do the same with `omero-mdv`. Clone this repo, then:
 
 ```
     $ cd omero-mdv
@@ -24,7 +35,7 @@ displaying analysis results prepared for a [training workshop](https://omero-gui
 
 ```
 
-# Headers
+# Running Django dev server
 
 MDV requires particular headers to allow SharedArrayBuffers to work in the browser.
 These will be added by Django Middleware but are not included for static requests.
@@ -36,11 +47,14 @@ When deployed in production, these headers should be added by NGINX.
 ```
 
 When running the development devserver, we need force the processing of static
-requests via the Middleware, which can be achieved with `--nostatic`, e.g:
+requests via the Middleware, which can be achieved with `--nostatic`.
+For example, to use the `omero-web` repo installed above:
 
 ```
+    $ cd omero-web
     $ python omeroweb/manage.py runserver 4080 --nostatic
 ```
+Then go to http://localhost:4080/
 
 
 # Update MDV viewer
