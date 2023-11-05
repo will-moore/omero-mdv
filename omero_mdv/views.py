@@ -1,12 +1,10 @@
 
 
-from collections import defaultdict
-import gzip
+
 from datetime import datetime
 import time
 from io import BytesIO
-import numpy as np
-import pandas as pd
+
 import re
 import json
 from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonResponse
@@ -24,7 +22,8 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 
 from django.conf import settings
 
-from .utils import get_mdv_ann, add_mdv_ann, update_file_ann
+from .utils import get_mdv_ann, add_mdv_ann, get_mapann_data, table_to_mdv_columns, \
+    get_text_indices, get_column_bytes
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -204,11 +203,11 @@ def list_mdv_configs(request, conn=None, **kwargs):
 def _mapann_info(conn, projectid):
     # summarise map-annotations to display in a table
 
+    # dict of {'key': {iid: 'value'}}
     mapann_data = get_mapann_data(conn, projectid)
 
     # summary for columns
     # name and values for each column
-
     columns = []
 
     for col_name, id_vals in mapann_data.items():
@@ -219,86 +218,10 @@ def _mapann_info(conn, projectid):
     return {"columns": columns}
 
 
-def get_mapann_data(conn, projectid):
-    qs = conn.getQueryService()
-    params = omero.sys.ParametersI()
-    params.addId(projectid)
-
-    query = """select ilink from ImageAnnotationLink as ilink
-            left outer join fetch ilink.child as ch
-            left outer join fetch ilink.parent as img
-            left outer join fetch img.datasetLinks as dlink
-            join fetch dlink.parent as dataset
-            left outer join fetch dataset.projectLinks as plink
-            join fetch plink.parent as project
-            where project.id=:id
-            and ch.class=MapAnnotation"""
-    
-    result = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
-
-    # need {key: {iid: value} }
-    kv_pairs = defaultdict(dict)
-    for annLink in result:
-        ann = annLink.child
-        img = annLink.parent
-        for kv in ann.mapValue:
-            kv_pairs[kv.name][img.id.val] = kv.value
-    return kv_pairs
-
-
 @login_required()
 def table_info(request, tableid, conn=None, **kwargs):
-    return JsonResponse(_table_info(conn, tableid))
 
-
-def _table_info(conn, tableid):
-    # open table and get columns...
-    r = conn.getSharedResources()
-    t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
-    if not t:
-        raise Http404("Table %s not found" % tableid)
-
-    try:
-        cols = t.getHeaders()
-        row_count = t.getNumberOfRows()
-
-        cols_data = []
-
-        col_types = {
-            "ImageColumn": "integer",
-            "WellColumn": "integer",
-            "StringColumn": "text",
-            "LongColumn": "integer",
-            "DoubleColumn": "double"
-        }
-
-        offset = 0
-
-        for column_index, col in enumerate(cols):
-            colclass = col.__class__.__name__
-            col_data = {
-                "datatype": col_types[colclass],
-                "name": col.name,   # display name
-                "field": col.name,  # col name
-                # "is_url": True,
-            }
-
-            if col_data["datatype"] == "text":
-                # we want to get all the values
-                values = get_column_values(t, column_index)
-                indices, vals = get_text_indices(values)
-                col_data["values"] = vals
-
-            col_bytes = get_column_bytes(t, column_index)
-            bytes_length = len(col_bytes)
-            col_data['bytes'] = [offset, offset + bytes_length - 1]
-            offset = offset + bytes_length
-
-            cols_data.append(col_data)
-    finally:
-        t.close()
-    
-    return {'columns': cols_data, "row_count": row_count}
+    return JsonResponse(table_to_mdv_columns(conn, tableid))
 
 
 @login_required()
@@ -323,7 +246,7 @@ def submit_form(request, conn=None, **kwargs):
         datasrcs["omero_tables"] = []
     
     for table_id in file_ids:
-        tdata = _table_info(conn, table_id)
+        tdata = table_to_mdv_columns(conn, table_id)
         group_id = conn.getObject("OriginalFile", table_id).getDetails().group.id.val
         datasrcs["omero_tables"].append({
             "file_id": table_id,
@@ -464,41 +387,6 @@ def _table_cols_byte_offsets(configid, conn, clear_cache=False):
 def table_cols_byte_offsets(request, configid, conn=None, **kwargs):
     clear_cache = request.GET.get('clear_cache') is not None
     return JsonResponse(_table_cols_byte_offsets(configid, conn, clear_cache))
-
-
-def get_text_indices(values):
-    unique_values = list(set(values))
-    val_dict = {value: i for i, value in enumerate(unique_values)}
-    return [val_dict[v] for v in values], [str(s) for s in unique_values]
-
-
-def get_column_values(table, column_index):
-    row_count = table.getNumberOfRows()
-    col_indices = [column_index]
-    hits = range(row_count)
-    res = table.slice(col_indices, hits)
-    return res.columns[0].values
-
-
-def get_column_bytes(table, column_index):
-    values = get_column_values(table, column_index)
-    dt = np.dtype(type(values[0]))
-    # if string, the values we want are indices
-    if dt == str:
-        indices, vals = get_text_indices(values)
-        # Column 'text' type is OK for up to 256 values
-        # TODO: support other column types
-        # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype---text
-        values = indices
-        dt = np.int8
-    else:
-        dt = np.float32
-
-    # MDV expects float32 encoding for numbers
-    arr = np.array(values, dt)
-    comp = gzip.compress(arr.tobytes())
-
-    return comp
 
 
 @login_required()
