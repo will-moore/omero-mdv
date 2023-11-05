@@ -1,10 +1,4 @@
 
-
-
-from datetime import datetime
-import time
-from io import BytesIO
-
 import re
 import json
 from django.http import HttpResponse, Http404, HttpResponseRedirect, JsonResponse
@@ -22,8 +16,9 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 
 from django.conf import settings
 
-from .utils import get_mdv_ann, add_mdv_ann, get_mapann_data, table_to_mdv_columns, \
-    get_text_indices, get_column_bytes
+from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
+    get_text_indices, get_column_bytes, datasets_by_id, mapanns_by_id, update_file_ann, \
+    save_text_to_file_annotation
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -80,27 +75,7 @@ def choose_data(request, conn=None, **kwargs):
 @login_required()
 def datasets_info(request, projectid, conn=None, **kwargs):
     # load data in {'iid': {'Dataset': 'name'}}
-
-    params = omero.sys.ParametersI()
-    params.addId(projectid)
-    qs = conn.getQueryService()
-    q = """
-        select image from Image as image
-        left outer join fetch image.datasetLinks as dsl
-        join fetch dsl.parent as dataset
-        left outer join dataset.projectLinks as pl
-        join pl.parent as project where project.id=:id
-    """
-    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = {}
-    for img in results:
-        img_id = img.id.val
-        if img_id not in rsp:
-            rsp[img_id] = {}
-        for dsl in img.copyDatasetLinks():
-            # Don't handle case of Image in 2 Datasets
-            rsp[img_id]["Dataset Name"] = dsl.parent.name.val
-    return JsonResponse({"data": rsp, "keys": ["Dataset Name"]})
+    return JsonResponse(datasets_by_id(conn, projectid))
 
 
 @login_required()
@@ -109,93 +84,13 @@ def mapann_info(request, projectid, conn=None, **kwargs):
     # return JsonResponse(_mapann_info(conn, projectid))
 
     # ...instead load data in {'iid': {'key': 'values'}}
-
-    params = omero.sys.ParametersI()
-    params.addId(projectid)
-    qs = conn.getQueryService()
-    q = """
-        select oal from ImageAnnotationLink as oal
-        left outer join fetch oal.child as ch
-        left outer join fetch oal.parent as image
-        left outer join image.datasetLinks as dsl
-        join dsl.parent as dataset
-        left outer join dataset.projectLinks as pl
-        join pl.parent as project
-        where ch.class=MapAnnotation
-        and project.id=:id
-    """
-    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = {}
-    keys = set()
-    for img_ann_link in results:
-        img_id = img_ann_link.parent.id.val
-        ann = img_ann_link.child
-        if img_id not in rsp:
-            rsp[img_id] = {}
-        
-        for kv in ann.getMapValue():
-            keys.add(kv.name)
-            rsp[img_id][kv.name] = kv.value
-    keys = list(keys)
-    keys.sort()
-    return JsonResponse({"data": rsp, "keys": keys})
+    return JsonResponse(mapanns_by_id(conn, projectid))
 
 
 @login_required()
 def list_mdv_configs(request, conn=None, **kwargs):
 
-    params = omero.sys.ParametersI()
-    params.addString('ns', wrap(JSON_FILEANN_NS))
-    q = """select new map(obj.id as id,
-                obj.description as desc,
-                o.id as owner_id,
-                o.firstName as firstName,
-                o.lastName as lastName,
-                e.time as time,
-                f.name as name,
-                f.id as file_id,
-                g.id as group_id,
-                g.name as group_name,
-                obj as obj_details_permissions)
-            from FileAnnotation obj
-            join obj.details.group as g
-            join obj.details.owner as o
-            join obj.details.creationEvent as e
-            join obj.file.details as p
-            join obj.file as f where obj.ns=:ns"""
-
-    qs = conn.getQueryService()
-    file_anns = qs.projection(q, params, conn.SERVICE_OPTS)
-    rsp = []
-    for file_ann in file_anns:
-        fa = unwrap(file_ann[0])
-        date = datetime.fromtimestamp(unwrap(fa['time'])/1000)
-        first_name = unwrap(fa['firstName'])
-        last_name = unwrap(fa['lastName'])
-        fig_file = {
-            'id': unwrap(fa['id']),
-            'file': {
-                'id': unwrap(fa['file_id']),
-                'name': unwrap(fa['name']),
-            },
-            'description': unwrap(fa['desc']),
-            'ownerFullName': "%s %s" % (first_name, last_name),
-            'owner': {
-                'id': fa['owner_id'],
-                'firstName': fa['firstName'],
-                'lastName': fa['lastName']
-            },
-            'group': {
-                'id': fa['group_id'],
-                'name': fa['group_name']
-            },
-            'creationDate': time.mktime(date.timetuple()),
-            'formattedDate': str(date.strftime('%a %d %b %Y, %I:%M%p')),
-            'canEdit': fa['obj_details_permissions'].get('canEdit')
-        }
-        rsp.append(fig_file)
-
-    context = {"configs": rsp}
+    context = {"configs": list_file_anns(conn, JSON_FILEANN_NS)}
     # return JsonResponse(context)
     return render(request, "mdv/configs.html", context)
 
@@ -266,26 +161,12 @@ def submit_form(request, conn=None, **kwargs):
                 "columns": mapann_data["columns"]
             }
 
+    config_json = json.dumps(datasrcs, indent=2)
     if group_id is None:
         return JsonResponse({"Error": "No data chosen"})
     conn.SERVICE_OPTS.setOmeroGroup(group_id)
-    config_json = json.dumps(datasrcs, indent=2)
 
-    # Save JSON to file annotation...
-    update = conn.getUpdateService()
-    config_json = config_json.encode('utf8')
-    # Create new file
-    file_size = len(config_json)
-    f = BytesIO()
-    f.write(config_json)
-    orig_file = conn.createOriginalFileFromFileObj(
-        f, '', mdv_name, file_size, mimetype="application/json")
-    # wrap it with File-Annotation to make it findable by NS etc.
-    fa = omero.model.FileAnnotationI()
-    fa.setFile(omero.model.OriginalFileI(orig_file.getId(), False))
-    fa.setNs(wrap(JSON_FILEANN_NS))
-    fa = update.saveAndReturnObject(fa, conn.SERVICE_OPTS)
-    ann_id = fa.getId().getValue()
+    ann_id = save_text_to_file_annotation(conn, config_json, mdv_name, JSON_FILEANN_NS)
 
     # redirect to app, with absolute config URL...
     url = reverse("mdv_index")

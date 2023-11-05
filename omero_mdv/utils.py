@@ -1,12 +1,15 @@
 
+from io import BytesIO
 from collections import defaultdict
+from datetime import datetime
+import time
 
 from django.http import Http404
 import numpy as np
 import gzip
 
 import omero
-from omero.rtypes import wrap, rlong
+from omero.rtypes import wrap, rlong, unwrap
 
 MDV_ANN_NAMESPACE = "omero-mdv.table_offsets"
 
@@ -68,6 +71,81 @@ def add_mdv_ann(conn, file_id, text):
     link = update.saveAndReturnObject(link, ctx)
 
     return comment
+
+
+def list_file_anns(conn, namespace):
+
+    params = omero.sys.ParametersI()
+    params.addString('ns', wrap(namespace))
+    q = """select new map(obj.id as id,
+                obj.description as desc,
+                o.id as owner_id,
+                o.firstName as firstName,
+                o.lastName as lastName,
+                e.time as time,
+                f.name as name,
+                f.id as file_id,
+                g.id as group_id,
+                g.name as group_name,
+                obj as obj_details_permissions)
+            from FileAnnotation obj
+            join obj.details.group as g
+            join obj.details.owner as o
+            join obj.details.creationEvent as e
+            join obj.file.details as p
+            join obj.file as f where obj.ns=:ns"""
+
+    qs = conn.getQueryService()
+    file_anns = qs.projection(q, params, conn.SERVICE_OPTS)
+    rsp = []
+    for file_ann in file_anns:
+        fa = unwrap(file_ann[0])
+        date = datetime.fromtimestamp(unwrap(fa['time'])/1000)
+        first_name = unwrap(fa['firstName'])
+        last_name = unwrap(fa['lastName'])
+        fig_file = {
+            'id': unwrap(fa['id']),
+            'file': {
+                'id': unwrap(fa['file_id']),
+                'name': unwrap(fa['name']),
+            },
+            'description': unwrap(fa['desc']),
+            'ownerFullName': "%s %s" % (first_name, last_name),
+            'owner': {
+                'id': fa['owner_id'],
+                'firstName': fa['firstName'],
+                'lastName': fa['lastName']
+            },
+            'group': {
+                'id': fa['group_id'],
+                'name': fa['group_name']
+            },
+            'creationDate': time.mktime(date.timetuple()),
+            'formattedDate': str(date.strftime('%a %d %b %Y, %I:%M%p')),
+            'canEdit': fa['obj_details_permissions'].get('canEdit')
+        }
+        rsp.append(fig_file)
+    
+    return rsp
+
+
+def save_text_to_file_annotation(conn, text, filename, ns):
+# Save JSON to file annotation...
+    update = conn.getUpdateService()
+    text = text.encode('utf8')
+    # Create new file
+    file_size = len(text)
+    f = BytesIO()
+    f.write(text)
+    orig_file = conn.createOriginalFileFromFileObj(
+        f, '', filename, file_size, mimetype="application/json")
+    # wrap it with File-Annotation to make it findable by NS etc.
+    fa = omero.model.FileAnnotationI()
+    fa.setFile(omero.model.OriginalFileI(orig_file.getId(), False))
+    fa.setNs(wrap(ns))
+    fa = update.saveAndReturnObject(fa, conn.SERVICE_OPTS)
+    ann_id = fa.getId().getValue()
+    return ann_id
 
 
 def update_file_ann(conn, ann_id, text_contents, name=None, desc=None):
@@ -181,6 +259,65 @@ def table_to_mdv_columns(conn, tableid):
         t.close()
     
     return {'columns': cols_data, 'row_count': row_count}
+
+
+def datasets_by_id(conn, projectid):
+    # load data in {'iid': {'Dataset': 'name'}}
+
+    params = omero.sys.ParametersI()
+    params.addId(projectid)
+    qs = conn.getQueryService()
+    q = """
+        select image from Image as image
+        left outer join fetch image.datasetLinks as dsl
+        join fetch dsl.parent as dataset
+        left outer join dataset.projectLinks as pl
+        join pl.parent as project where project.id=:id
+    """
+    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
+    rsp = {}
+    for img in results:
+        img_id = img.id.val
+        if img_id not in rsp:
+            rsp[img_id] = {}
+        for dsl in img.copyDatasetLinks():
+            # Don't handle case of Image in 2 Datasets
+            rsp[img_id]["Dataset Name"] = dsl.parent.name.val
+    return {"data": rsp, "keys": ["Dataset Name"]}
+
+
+def mapanns_by_id(conn, projectid):
+    # load data in {'iid': {'key': 'values'}}
+
+    params = omero.sys.ParametersI()
+    params.addId(projectid)
+    qs = conn.getQueryService()
+    q = """
+        select oal from ImageAnnotationLink as oal
+        left outer join fetch oal.child as ch
+        left outer join fetch oal.parent as image
+        left outer join image.datasetLinks as dsl
+        join dsl.parent as dataset
+        left outer join dataset.projectLinks as pl
+        join pl.parent as project
+        where ch.class=MapAnnotation
+        and project.id=:id
+    """
+    results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
+    rsp = {}
+    keys = set()
+    for img_ann_link in results:
+        img_id = img_ann_link.parent.id.val
+        ann = img_ann_link.child
+        if img_id not in rsp:
+            rsp[img_id] = {}
+        
+        for kv in ann.getMapValue():
+            keys.add(kv.name)
+            rsp[img_id][kv.name] = kv.value
+    keys = list(keys)
+    keys.sort()
+    return {"data": rsp, "keys": keys}
 
 
 def get_text_indices(values):
