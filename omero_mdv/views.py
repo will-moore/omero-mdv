@@ -145,7 +145,8 @@ def submit_form(request, conn=None, **kwargs):
         group_id = conn.getObject("OriginalFile", table_id).getDetails().group.id.val
         datasrcs["omero_tables"].append({
             "file_id": table_id,
-            "columns": tdata["columns"]
+            "columns": tdata["columns"],
+            "size": tdata["row_count"]
         })
 
     if kvp_parent is not None:
@@ -516,11 +517,8 @@ def datasources(request, configid, conn=None, **kwargs):
     config_json = _config_json(conn, configid)
 
     # We want to compile columns from all Tables, KVPs etc. 
-    columns = []
-
-    row_count = 1000
-
     columns = get_columns(config_json)
+    row_count = config_json['omero_tables'][0]['size']
 
     ds = [
         {
