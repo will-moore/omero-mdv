@@ -619,3 +619,16 @@ def thumbnail(request, imageid, conn=None, **kwargs):
 @login_required()
 def image(request, imageid, conn=None, **kwargs):
     return render_image(request, imageid, conn=conn)
+
+
+@login_required()
+def delete_mdv_config(request, conn=None, **kwargs):
+    """ POST 'ann_id' to delete the FileAnnotation """
+
+    if request.method != 'POST':
+        return HttpResponse("Need to POST 'ann_id' to delete")
+
+    ann_id = request.POST.get('ann_id')
+    conn.deleteObjects("Annotation", [ann_id], wait=True)
+    url = reverse("open_mdv")
+    return HttpResponseRedirect(url)
