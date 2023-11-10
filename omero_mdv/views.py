@@ -139,9 +139,23 @@ def submit_form(request, conn=None, **kwargs):
     datasrcs = {}
     if len(file_ids) > 0:
         datasrcs["omero_tables"] = []
+
+    # Look-up Image IDs as 'primary keys' and save these to the config
+    # If we have a Table, 
+    primary_keys = {}
     
     for table_id in file_ids:
+        print("submit: table_id", table_id)
         tdata = table_to_mdv_columns(conn, table_id)
+        # just use the *first* table to set these...
+        if "Image" not in primary_keys:
+            for column_index, col in enumerate(tdata["columns"]):
+                if col["name"] == "Image":
+                    print("col", col)
+                    r = conn.getSharedResources()
+                    t = r.openTable(omero.model.OriginalFileI(table_id), conn.SERVICE_OPTS)
+                    ids = get_column_values(t, column_index)
+                    primary_keys["Image"] = ids
         group_id = conn.getObject("OriginalFile", table_id).getDetails().group.id.val
         datasrcs["omero_tables"].append({
             "file_id": table_id,
@@ -149,18 +163,74 @@ def submit_form(request, conn=None, **kwargs):
             "size": tdata["row_count"]
         })
 
+    print("submit: kvp_parent", kvp_parent)
     if kvp_parent is not None:
+        # TODO: Load ALL Key-Value pairs in MDV format and save to config!!!!!!
         obj_id = int(kvp_parent.split("-")[1])
-        # TODO: support other Object types
+        # TODO: support other Object types instead of only 'project'
         if kvp_parent.startswith("project-"):
             if group_id is None:
                 group_id = conn.getObject("Project", obj_id).getDetails().group.id.val
-            mapann_data = _mapann_info(conn, obj_id)
+            # *** need ALL KVP here, not just column summary!!
+            rsp = mapanns_by_id(conn, obj_id)
+            kvp_by_id = rsp["data"]
+            kvp_keys = rsp["keys"]
+
+            # TODO: If we DO have primary keys,
+            if "Image" not in primary_keys:
+                iids = list(kvp_by_id.keys())
+                iids.sort()
+                primary_keys["Image"] = iids
+
+            columns = []
+            for colname in kvp_keys:
+                # create column with list of all known 'values' 
+                # and the data is the index
+                # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype--mulitext
+                # [ "A,B,C", "B,A", "A,B", "D,E", "E,C,D" ]
+                # would be converted to
+                # values:["A","B","C","D","E"]
+                # stringLength:3
+                # data:[0,1,2, 1,0,65535, 0,1,65535, 3,4,65535, 0,2,3] //(Uint16Array)
+
+                # first get ALL values for this key...
+                vals = set()
+                max_value_count = 0
+                for key_vals in kvp_by_id.values():
+                    # handle multiple values for a key
+                    obj_vals = key_vals.get(colname, [])
+                    max_value_count = max(max_value_count, len(obj_vals))
+                    vals.update(obj_vals)
+
+                vals = list(vals)
+                vals.sort()
+
+                # Now, for each row/image, convert KVP values into indicies
+                kvp_data = []
+                for iid in primary_keys["Image"]:
+                    obj_kvp = kvp_by_id[iid]
+                    indices = []
+                    if colname in obj_kvp:
+                        obj_vals = obj_kvp[colname]
+                        indices = [vals.index(v) for v in obj_vals]
+                    for fill in range(max_value_count - len(indices)):
+                        indices.append(65535)
+                    kvp_data.extend(indices)
+
+                columns.append({
+                    "name": colname,
+                    "values": vals,
+                    "stringLength": max_value_count,
+                    "data": kvp_data,
+                })
+
             datasrcs["map_anns"] = {
                 "parent_type": "project",
                 "parent_id": obj_id,
-                "columns": mapann_data["columns"]
+                "columns": columns
             }
+
+    datasrcs["primary_keys"] = primary_keys
 
     config_json = json.dumps(datasrcs, indent=2)
     if group_id is None:

@@ -293,15 +293,25 @@ def mapanns_by_id(conn, projectid):
     params.addId(projectid)
     qs = conn.getQueryService()
     q = """
-        select oal from ImageAnnotationLink as oal
-        left outer join fetch oal.child as ch
-        left outer join fetch oal.parent as image
+        select image.id from Image as image
         left outer join image.datasetLinks as dsl
         join dsl.parent as dataset
         left outer join dataset.projectLinks as pl
         join pl.parent as project
+        where project.id=:id
+    """
+    result = qs.projection(q, params, conn.SERVICE_OPTS)
+    iids = [r[0].val for r in result]
+    print("iids", iids)
+
+    params = omero.sys.ParametersI()
+    params.addIds(iids)
+    q = """
+        select oal from ImageAnnotationLink as oal
+        left outer join fetch oal.child as ch
+        left outer join fetch oal.parent as image
         where ch.class=MapAnnotation
-        and project.id=:id
+        and image.id in (:ids)
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
     rsp = defaultdict(lambda: defaultdict(list))
@@ -314,6 +324,12 @@ def mapanns_by_id(conn, projectid):
             rsp[img_id][kv.name].append(kv.value)
     keys = list(keys)
     keys.sort()
+
+    # make sure we include images without KVPs
+    for iid in iids:
+        if iid not in rsp:
+            rsp[iid] = {}
+
     return {"data": rsp, "keys": keys}
 
 
