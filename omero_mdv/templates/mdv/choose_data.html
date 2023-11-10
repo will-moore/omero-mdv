@@ -90,7 +90,7 @@
         <label>
           <input
             id="mapAnnsCheckbox"
-            name="mapann"
+            name="mapanns"
             type="checkbox"
             value="{{obj.type}}-{{obj.id}}"
           />
@@ -153,7 +153,9 @@
           </thead>
           <tbody>
             ${
-              rows ? rows.map(row => html`<tr>${row.map((val) => html`<td>${val}</td>`)}</tr>`) : html``
+              rows ? rows.map(row => html`
+                <tr>${row.map((val) => html`<td>${val}</td>`)}</tr>
+              `) : html``
             }
         </tbody></table>
       `;
@@ -228,8 +230,8 @@
             // parseInt just so we can sort
             let imgIds = Object.keys(imgData).map(k => parseInt(k));
             imgIds.sort();
-            // each row starts with iid, followed by values for each column
-            let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid][c.name] || "")))
+            // each row starts with iid, followed by values (list) for each column.
+            let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid]?.[c.name]?.join(", ") || "")))
             columns = [{"name": "Image"}].concat(columns);
             datasources.addTable(tableId, {columns, rows});
           })

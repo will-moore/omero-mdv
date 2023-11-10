@@ -18,7 +18,7 @@ from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
     get_text_indices, get_column_bytes, datasets_by_id, mapanns_by_id, update_file_ann, \
-    save_text_to_file_annotation
+    save_text_to_file_annotation, get_column_values
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -79,7 +79,7 @@ def datasets_info(request, projectid, conn=None, **kwargs):
 
 
 @login_required()
-def mapann_info(request, projectid, conn=None, **kwargs):
+def mapanns_info(request, projectid, conn=None, **kwargs):
     # for the 'choose_data' page, we don't load MDV formatted info...
     # return JsonResponse(_mapann_info(conn, projectid))
 
@@ -128,7 +128,7 @@ def submit_form(request, conn=None, **kwargs):
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
     file_ids = request.POST.getlist("file")
-    kvp_parent = request.POST.get("map_anns")
+    kvp_parent = request.POST.get("mapanns")
     mdv_name = request.POST.get("mdv_name")
 
     # Load data to compile our MDV config file

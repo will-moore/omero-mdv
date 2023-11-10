@@ -244,9 +244,10 @@ def table_to_mdv_columns(conn, tableid):
             }
 
             if col_data["datatype"] == "text":
-                # we want to get all the values
+                # we want to get all the values...
                 values = get_column_values(t, column_index)
                 indices, vals = get_text_indices(values)
+                # ...These are the unique values
                 col_data["values"] = vals
 
             col_bytes = get_column_bytes(t, column_index)
@@ -262,7 +263,8 @@ def table_to_mdv_columns(conn, tableid):
 
 
 def datasets_by_id(conn, projectid):
-    # load data in {'iid': {'Dataset': 'name'}}
+    # load data in {'iid': {'Dataset Name': ['name', 'name2]}}
+    # Same format as mapanns_by_id
 
     params = omero.sys.ParametersI()
     params.addId(projectid)
@@ -275,19 +277,17 @@ def datasets_by_id(conn, projectid):
         join pl.parent as project where project.id=:id
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = {}
+    rsp = defaultdict(lambda: defaultdict(list))
     for img in results:
         img_id = img.id.val
-        if img_id not in rsp:
-            rsp[img_id] = {}
         for dsl in img.copyDatasetLinks():
             # Don't handle case of Image in 2 Datasets
-            rsp[img_id]["Dataset Name"] = dsl.parent.name.val
+            rsp[img_id]["Dataset Name"].append(dsl.parent.name.val)
     return {"data": rsp, "keys": ["Dataset Name"]}
 
 
 def mapanns_by_id(conn, projectid):
-    # load data in {'iid': {'key': 'values'}}
+    # load data in {'iid': {'key': ['value', 'value2']}}
 
     params = omero.sys.ParametersI()
     params.addId(projectid)
@@ -304,17 +304,14 @@ def mapanns_by_id(conn, projectid):
         and project.id=:id
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = {}
+    rsp = defaultdict(lambda: defaultdict(list))
     keys = set()
     for img_ann_link in results:
         img_id = img_ann_link.parent.id.val
         ann = img_ann_link.child
-        if img_id not in rsp:
-            rsp[img_id] = {}
-        
         for kv in ann.getMapValue():
             keys.add(kv.name)
-            rsp[img_id][kv.name] = kv.value
+            rsp[img_id][kv.name].append(kv.value)
     keys = list(keys)
     keys.sort()
     return {"data": rsp, "keys": keys}
