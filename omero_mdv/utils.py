@@ -252,7 +252,7 @@ def table_to_mdv_columns(conn, tableid):
 
             col_bytes = get_column_bytes(values)
             bytes_length = len(col_bytes)
-            col_data['bytes'] = [offset, offset + bytes_length - 1]
+            col_data['bytes'] = [offset, offset + bytes_length]
             offset = offset + bytes_length
 
             cols_data.append(col_data)
