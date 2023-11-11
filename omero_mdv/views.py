@@ -143,15 +143,17 @@ def submit_form(request, conn=None, **kwargs):
     # Look-up Image IDs as 'primary keys' and save these to the config
     # If we have a Table, 
     primary_keys = {}
-    
+
+    # TODO: update bytes_offset if we have a table    
+    bytes_offset = 0
+
     for table_id in file_ids:
         print("submit: table_id", table_id)
         tdata = table_to_mdv_columns(conn, table_id)
-        # just use the *first* table to set these...
+        # just use the *first* table to set primary keys...
         if "Image" not in primary_keys:
             for column_index, col in enumerate(tdata["columns"]):
                 if col["name"] == "Image":
-                    print("col", col)
                     r = conn.getSharedResources()
                     t = r.openTable(omero.model.OriginalFileI(table_id), conn.SERVICE_OPTS)
                     ids = get_column_values(t, column_index)
@@ -160,29 +162,41 @@ def submit_form(request, conn=None, **kwargs):
         datasrcs["omero_tables"].append({
             "file_id": table_id,
             "columns": tdata["columns"],
-            "size": tdata["row_count"]
-        })
+            "size": tdata["row_count"]      # TODO: do we need this here? saved globally below
+        }) 
 
-    print("submit: kvp_parent", kvp_parent)
     if kvp_parent is not None:
-        # TODO: Load ALL Key-Value pairs in MDV format and save to config!!!!!!
+        # Load ALL Key-Value pairs in MDV format and save to config!!!!!!
         obj_id = int(kvp_parent.split("-")[1])
         # TODO: support other Object types instead of only 'project'
         if kvp_parent.startswith("project-"):
             if group_id is None:
                 group_id = conn.getObject("Project", obj_id).getDetails().group.id.val
-            # *** need ALL KVP here, not just column summary!!
+            # This includes all KVP values, saved below...
             rsp = mapanns_by_id(conn, obj_id)
             kvp_by_id = rsp["data"]
             kvp_keys = rsp["keys"]
+
+            columns = []
 
             # TODO: If we DO have primary keys,
             if "Image" not in primary_keys:
                 iids = list(kvp_by_id.keys())
                 iids.sort()
+                size = len(iids)
                 primary_keys["Image"] = iids
+                # Create an "Image" column
+                img_bytes = get_column_bytes(iids)
+                byte_count = len(img_bytes)
+                columns.append({
+                    "name": "Image",
+                    "field": "Image",
+                    "datatype": "integer",
+                    "bytes": [bytes_offset, bytes_offset + byte_count],
+                    "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
+                })
+                bytes_offset += byte_count
 
-            columns = []
             for colname in kvp_keys:
                 # create column with list of all known 'values' 
                 # and the data is the index
@@ -202,6 +216,7 @@ def submit_form(request, conn=None, **kwargs):
                     max_value_count = max(max_value_count, len(obj_vals))
                     vals.update(obj_vals)
 
+                # TODO: if all vals are Numbers, create an "integer" or "double" column!
                 vals = list(vals)
                 vals.sort()
 
@@ -217,12 +232,19 @@ def submit_form(request, conn=None, **kwargs):
                         indices.append(65535)
                     kvp_data.extend(indices)
 
-                columns.append({
+                byte_count = len(get_column_bytes(kvp_data))
+
+                col = {
                     "name": colname,
+                    "datatype": "text" if max_value_count == 1 else "multitext",
                     "values": vals,
-                    "stringLength": max_value_count,
                     "data": kvp_data,
-                })
+                    "bytes": [bytes_offset, bytes_offset + byte_count]
+                }
+                if max_value_count > 1:
+                    col["stringLength"] = max_value_count
+                columns.append(col)
+                bytes_offset += byte_count
 
             datasrcs["map_anns"] = {
                 "parent_type": "project",
@@ -230,6 +252,9 @@ def submit_form(request, conn=None, **kwargs):
                 "columns": columns
             }
 
+    datasrcs["size"] = len(primary_keys["Image"])
+
+    # TODO: not sure we need to save primary keys??
     datasrcs["primary_keys"] = primary_keys
 
     config_json = json.dumps(datasrcs, indent=2)
@@ -364,18 +389,26 @@ def table_bytes(request, configid, conn=None, **kwargs):
     column_index = 0
     # go through config to get bytes offsets for all columns
     # We combine the columns for each table in the config...
-    for table_info in config_json["omero_tables"]:
-        column_index = 0
-        columns = table_info["columns"]
-        for count, col in enumerate(columns):
-            if offset == byte1:
-                tableid = table_info["file_id"]
-                column_index = count
+    if "omero_tables" in config_json:
+        for table_info in config_json["omero_tables"]:
+            column_index = 0
+            columns = table_info["columns"]
+            for count, col in enumerate(columns):
+                if offset == byte1:
+                    tableid = table_info["file_id"]
+                    column_index = count
+                    break
+                bytes_length = col["bytes"][1] - col["bytes"][0]
+                offset = offset + bytes_length
+            if tableid is not None:
                 break
-            bytes_length = col["bytes"][1] - col["bytes"][0]
-            offset = offset + bytes_length
-        if tableid is not None:
-            break
+
+    # IF we didn't find our column in the 'omero_tables' config...
+    if tableid is None and "map_anns" in config_json:
+        for col in config_json["map_anns"]["columns"]:
+            if col["bytes"][0] == byte1:
+                column_bytes = get_column_bytes(col["data"])
+                break
 
     # TODO: THIS!
     # Add data from Map Anntations if we have some...
@@ -387,15 +420,17 @@ def table_bytes(request, configid, conn=None, **kwargs):
     # byte_offsets = _table_cols_byte_offsets(configid, conn)
 
 
-    r = conn.getSharedResources()
-    t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
-    if not t:
-        raise Http404("Table %s not found" % tableid)
+    if tableid is not None:
+        r = conn.getSharedResources()
+        t = r.openTable(omero.model.OriginalFileI(tableid), conn.SERVICE_OPTS)
+        if not t:
+            raise Http404("Table %s not found" % tableid)
 
-    try:
-        column_bytes = get_column_bytes(t, column_index)
-    finally:
-        t.close()
+        try:
+            values = get_column_values(t, column_index)
+            column_bytes = get_column_bytes(values)
+        finally:
+            t.close()
 
     rsp = HttpResponse(column_bytes, content_type="application/octet-stream")
     rsp['Content-Range'] = 'bytes {0}-{1}/{2}'.format(byte1, byte2, size)
@@ -408,17 +443,34 @@ def get_columns(mdv_config):
     # Making sure we avoid duplicate names/fields
     columns = []
     column_names = []
-    for table_info in mdv_config["omero_tables"]:
-        for col in table_info["columns"]:
-            colname = col["name"]
-            increment= 1
-            while colname in column_names:
-                colname = col["name"] + f"{len(column_names)}"
-                increment += 1
-            col["name"] = colname
-            col["field"] = colname
-            columns.append(col)
-            column_names.append(col["name"])
+    # TODO: move bytes calculation for KVP to config creation
+    bytes_offset = 0
+    if "omero_tables" in mdv_config:
+        for table_info in mdv_config["omero_tables"]:
+            for col in table_info["columns"]:
+                colname = col["name"]
+                increment= 1
+                # avoid duplicate names
+                while colname in column_names:
+                    colname = col["name"] + f"{len(column_names)}"
+                    increment += 1
+                col["name"] = colname
+                col["field"] = colname
+                columns.append(col)
+                column_names.append(col["name"])
+
+    if "map_anns" in mdv_config:
+        mapann_json = mdv_config["map_anns"]
+        # Process other columns...
+        # for datasources, we don't need 'data'
+        for c in mapann_json["columns"]:
+            # handles strings or numbers
+            col_bytes = get_column_bytes(c['data'])
+            byte_count = len(col_bytes)
+            c["bytes"] = [bytes_offset, bytes_offset + byte_count]
+            bytes_offset += byte_count
+            del(c['data'])
+            columns.append(c)
     
     # Add data from Map Anntations if we have some...
     # if "map_anns" in mdv_config:
@@ -585,16 +637,14 @@ def datasources(request, configid, conn=None, **kwargs):
 
     # Load
     config_json = _config_json(conn, configid)
-
-    # We want to compile columns from all Tables, KVPs etc. 
     columns = get_columns(config_json)
-    row_count = config_json['omero_tables'][0]['size']
 
+    # Single datasource since we join everything into one table
     ds = [
         {
             # This name will generate URL to load values
             "name": "mdv_config_%s" % configid,
-            "size": row_count,
+            "size": config_json["size"],
             "images": {
             "composites": {
                 "base_url": "./images/",

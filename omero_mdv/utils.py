@@ -243,14 +243,14 @@ def table_to_mdv_columns(conn, tableid):
                 # "is_url": True,
             }
 
+            values = get_column_values(t, column_index)
             if col_data["datatype"] == "text":
                 # we want to get all the values...
-                values = get_column_values(t, column_index)
                 indices, vals = get_text_indices(values)
                 # ...These are the unique values
                 col_data["values"] = vals
 
-            col_bytes = get_column_bytes(t, column_index)
+            col_bytes = get_column_bytes(values)
             bytes_length = len(col_bytes)
             col_data['bytes'] = [offset, offset + bytes_length - 1]
             offset = offset + bytes_length
@@ -347,8 +347,7 @@ def get_column_values(table, column_index):
     return res.columns[0].values
 
 
-def get_column_bytes(table, column_index):
-    values = get_column_values(table, column_index)
+def get_column_bytes(values):
     dt = np.dtype(type(values[0]))
     # if string, the values we want are indices
     if dt == str:
