@@ -8,6 +8,7 @@ from django.templatetags.static import static
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
+import numpy as np
 
 import omero
 from omeroweb.decorators import login_required
@@ -406,19 +407,14 @@ def table_bytes(request, configid, conn=None, **kwargs):
     # IF we didn't find our column in the 'omero_tables' config...
     if tableid is None and "map_anns" in config_json:
         for col in config_json["map_anns"]["columns"]:
+            dype = None
+            if col["datatype"] == "text":
+                dype = np.int8
+            elif col["datatype"] == "multitext":
+                dype = np.int16
             if col["bytes"][0] == byte1:
-                column_bytes = get_column_bytes(col["data"])
+                column_bytes = get_column_bytes(col["data"], dype)
                 break
-
-    # TODO: THIS!
-    # Add data from Map Anntations if we have some...
-    # if "map_anns" in config_json:
-    #     columns = config_json["map_anns"]["columns"]
-    #     column_names.extend([col["name"] for col in columns])
-
-    # get dict of {"col_name": [start, end]}
-    # byte_offsets = _table_cols_byte_offsets(configid, conn)
-
 
     if tableid is not None:
         r = conn.getSharedResources()
