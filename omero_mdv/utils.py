@@ -281,9 +281,9 @@ def datasets_by_id(conn, projectid):
     for img in results:
         img_id = img.id.val
         for dsl in img.copyDatasetLinks():
-            # Don't handle case of Image in 2 Datasets
-            rsp[img_id]["Dataset Name"].append(dsl.parent.name.val)
-    return {"data": rsp, "keys": ["Dataset Name"]}
+            # List handles case of Image in 2 Datasets
+            rsp[img_id]["Dataset_Name"].append(dsl.parent.name.val)
+    return {"data": rsp, "keys": ["Dataset_Name"]}
 
 
 def mapanns_by_id(conn, projectid):

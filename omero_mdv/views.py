@@ -129,7 +129,6 @@ def submit_form(request, conn=None, **kwargs):
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
     file_ids = request.POST.getlist("file")
-    kvp_parent = request.POST.get("mapanns")
     mdv_name = request.POST.get("mdv_name")
 
     # Load data to compile our MDV config file
@@ -167,15 +166,21 @@ def submit_form(request, conn=None, **kwargs):
         # update bytes, needed for KVP etc below...
         bytes_offset = tdata["columns"][-1]["bytes"][1]
 
-    if kvp_parent is not None:
+    # Handle KVPs and Datasets in the same way...
+    for form_input in ["mapanns", "datasets"]:
+      kvp_parent = request.POST.get(form_input)
+      if kvp_parent is not None:
         # Load ALL Key-Value pairs in MDV format and save to config!!!!!!
         obj_id = int(kvp_parent.split("-")[1])
         # TODO: support other Object types instead of only 'project'
         if kvp_parent.startswith("project-"):
             if group_id is None:
                 group_id = conn.getObject("Project", obj_id).getDetails().group.id.val
-            # This includes all KVP values, saved below...
-            rsp = mapanns_by_id(conn, obj_id)
+            # Map-Anns and Datasets loaded in the same format...
+            if form_input == "mapanns":
+                rsp = mapanns_by_id(conn, obj_id)
+            else:
+                rsp = datasets_by_id(conn, obj_id)
             kvp_by_id = rsp["data"]
             kvp_keys = rsp["keys"]
 
