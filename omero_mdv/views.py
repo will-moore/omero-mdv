@@ -385,7 +385,6 @@ def table_bytes(request, configid, conn=None, **kwargs):
     config_json = _config_json(conn, configid)
 
     # need to find table_id and column index for requested bytes...
-    offset = 0
     tableid = None
     column_index = 0
     # go through config to get bytes offsets for all columns

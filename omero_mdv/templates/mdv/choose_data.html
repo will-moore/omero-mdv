@@ -77,7 +77,7 @@
           {% for ann in anns %}
           <li>
             <label>
-              <input name="file" type="checkbox" value="{{ann.file.id}}" />
+              <input name="file" type="radio" value="{{ann.file.id}}" />
               File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
             <a target="_blank" href="{% url 'omero_table' ann.file.id %}"
