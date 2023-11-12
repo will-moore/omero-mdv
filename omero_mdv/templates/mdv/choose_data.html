@@ -47,7 +47,7 @@
         </label>
 
         <footer>
-          <button type="submit">OK</button>
+          <button disabled type="submit" title="Please choose some data above">OK</button>
         </footer>
       </form>
       <div id="datasources">
@@ -115,12 +115,18 @@
     datasources.addEventListener("dataAdded", (e) => {renderTable()})
 
 
+    function enableSubmit() {
+      let btn = document.querySelector("button[type='submit']")
+      btn.removeAttribute("disabled");
+      btn.setAttribute("title", "Submit!");
+    }
+
     // Handle click on Tables checkbox...
     // document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
     function handleTableClick(event) {
       const checked = event.target.checked;
       const tableId = event.target.value;
-      console.log("tableId", tableId);
+      enableSubmit();
       // if data not loaded...
       if (!datasources.omero_tables[tableId]) {
         datasources.addTable(tableId, {columns: [], display: false});
@@ -150,6 +156,7 @@
     document.getElementById("datasetsCheckbox").addEventListener("click", loadDataSource);
 
     function loadDataSource (event) {
+      enableSubmit();
       const checked = event.target.checked;
       let name = event.target.getAttribute("name");
       // if data not loaded...
