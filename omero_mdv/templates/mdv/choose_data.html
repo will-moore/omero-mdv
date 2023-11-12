@@ -7,8 +7,16 @@
         display: flex;
         flex-direction: column;
       }
+      h2,
+      h3 {
+        font-weight: 400;
+      }
+      h2 {
+        margin: 0 0 10px 0;
+      }
       ul {
         list-style: none;
+        padding: 0;
       }
       header {
         background: #333;
@@ -21,8 +29,15 @@
       th {
         font-weight: 100;
       }
+      #datasources {
+        display: flex;
+        justify-content: flex-start;
+        color: #999;
+      }
       table {
+        float: left;
         border-collapse: collapse;
+        color: #999;
       }
       td,
       th {
@@ -31,22 +46,43 @@
         padding: 5px;
         border-collapse: collapse;
       }
+      form {
+        border: solid #ddd 1px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        padding: 10px;
+        position: absolute;
+        top: 100px;
+        left: 50%;
+        width: 500px;
+        margin-left: -250px;
+      }
+      button[type="submit"] {
+        float: right;
+      }
     </style>
   </head>
   <body>
     <header></header>
     <main>
-      <h2>Choose data for {{obj_type}}-{{obj_id}}:</h2>
       <form method="post" action="{% url 'mdv_submit_form' %}">
+        <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
         {% csrf_token %}
+        <label
+          >MDV Project name: <input name="mdv_name" value="{{obj.name}}"
+        /></label>
         <h3>OMERO.tables</h3>
         <ul>
           {% for ann in anns %}
           <li>
             <label>
-              <input name="file" type="checkbox" value="{{ann.file.id}}" />
+              <input name="file" type="radio" value="{{ann.file.id}}" />
               File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
+            <a target="_blank" href="{% url 'omero_table' ann.file.id %}"
+              >View Table</a
+            >
           </li>
           {% endfor %}
         </ul>
@@ -54,54 +90,81 @@
         <label>
           <input
             id="mapAnnsCheckbox"
-            name="map_anns"
+            name="mapanns"
             type="checkbox"
-            value="{{obj_type}}-{{obj_id}}"
+            value="{{obj.type}}-{{obj.id}}"
           />
           Map Annotations
+        </label>
+        <br>
+
+        <label style="line-height: 40px;">
+          <input
+            id="datasetsCheckbox"
+            name="datasets"
+            type="checkbox"
+            value="{{obj.type}}-{{obj.id}}"
+          />
+          Datasets
         </label>
 
         <br />
         <button type="submit">OK</button>
-
-        <hr />
-
-        <div id="datasources"></div>
       </form>
+      <table id="datasources">
+        <!-- lit-html adds <table> here -->
+      </table>
     </main>
   </body>
 
   <script type="module">
+    let WEB_INDEX = "{% url 'webindex' %}";
     let MDV_INDEX = "{% url 'mdv_index' %}";
-    let obj_type = "{{obj_type}}";
-    let obj_id = {{obj_id}};
+    let obj_type = "{{obj.type}}";
+    let obj_id = {{obj.id}};
 
-    import {html, render} from 'https://unpkg.com/lit-html?module';
+    // NB: lit-html 3.0.0 available, but cdn broken just now!
+    // import {html, render} from 'https://unpkg.com/lit-html?module';
+    import {html, render} from '{% static "mdv/lit-html_2.8.0/lit-html.js" %}';
 
-    // datasources is the data model - updated via AJAX when user updates form, then we render table
-    let datasources = {
+    // datasources is the data model - updated via AJAX when user updates form
+    class DataModel extends EventTarget {
+
       // each table item is {id: {columns:[], etc} }
-      omero_tables: {},
-      // this object is also {columns:[], etc}
-      map_anns: {columns: [], display: false}
+      omero_tables = {}
+      map_anns = {columns: [], display: false}
+
+      addTable(tableId, tableData) {
+        console.log("ADD_TABLE!! ", tableId, tableData)
+        this.omero_tables[tableId] = tableData;
+        this.dispatchEvent(new CustomEvent("dataAdded", {}));
+      }
+    }
+
+    let datasources = new DataModel();
+
+
+    const tableTemplate = ({columns, rows}) => {
+      return html`
+        ${ columns.length == 0 ? "loading..." : ""}
+        <table>
+          <thead>
+          <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
+          </thead>
+          <tbody>
+            ${
+              rows ? rows.map(row => html`
+                <tr>${row.map((val) => html`<td>${val}</td>`)}</tr>
+              `) : html``
+            }
+        </tbody></table>
+      `;
     }
 
 
-    const tableTemplate = (columns) => html`
-      ${ columns.length == 0 ? "loading..." : ""}
-      <table><tbody>
-        <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
-        <tr>${columns.map((col) => html`<td>${col.values ? col.values.join(", ") : ""}</td>`)}</tr>
-      </tbody></table>
-    `;
-
-
+      // ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
     const mainTemplate = (datasources) => html`
-
-      ${Object.values(datasources.omero_tables).map(t => t.display ? tableTemplate(t.columns) : html``)}
-
-      ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
-
+      ${Object.values(datasources.omero_tables).map(t => tableTemplate(t))}
     `;
 
     // Render the template to the document
@@ -109,6 +172,8 @@
       console.log("rendering Table...", datasources);
       render(mainTemplate(datasources), document.getElementById("datasources"));
     }
+
+    datasources.addEventListener("dataAdded", (e) => {renderTable()})
 
 
     // Handle click on Tables checkbox...
@@ -119,38 +184,60 @@
       console.log("tableId", tableId);
       // if data not loaded...
       if (!datasources.omero_tables[tableId]) {
-        datasources.omero_tables[tableId] = {columns: [], display: false}
+        datasources.addTable(tableId, {columns: [], display: false});
       }
       if (checked && !datasources.omero_tables[tableId]?.columns?.length > 0) {
-        let table_data = fetch(`${MDV_INDEX}table_info/${tableId}/`)
+        // http://localhost:4080/webclient/omero_table/2154/json/?limit=500&offset=0
+        let url = `${WEB_INDEX}omero_table/${tableId}/json/?limit=500&offset=0`;
+        // let url = `${MDV_INDEX}table_info/${tableId}/`
+        let table_data = fetch(url)
           .then(rsp => rsp.json())
           .then(data => {
             console.log("data", data);
-            datasources.omero_tables[tableId].columns = data.columns;
-            renderTable();
+            let tabledata = data.data;
+            let columns = tabledata.columns.map(c => {return {"name": c}});
+            datasources.addTable(tableId, {columns, rows: tabledata.rows});
           })
       }
       datasources.omero_tables[tableId].display = checked;
-      renderTable();
     };
+    // bind click handler to omero.table checkboxes
     document.querySelectorAll("input[name='file']").forEach(i => i.addEventListener("click", handleTableClick));
 
-  
-    // Handle click on Map Annotations checkbox...
-    document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
+
+    // Handle click on Map Annotations / Dataset checkboxes...
+    // Both these load data in the same format...
+    document.getElementById("mapAnnsCheckbox").addEventListener("click", loadDataSource);
+    document.getElementById("datasetsCheckbox").addEventListener("click", loadDataSource);
+
+    function loadDataSource (event) {
       const checked = event.target.checked;
+      let name = event.target.getAttribute("name");
       // if data not loaded...
+      const tableId = `${name}_${obj_id}`
+      if (!datasources.omero_tables[tableId]) {
+        datasources.addTable(tableId, {columns: [], display: false});
+      }
       if (checked && datasources.map_anns.columns.length == 0) {
-        let map_anns_data = fetch(`${MDV_INDEX}mapann_info/${obj_id}/`)
+        // name is 'mapann' or 'datasets'
+        let map_anns_data = fetch(`${MDV_INDEX}${name}_info/${obj_id}/`)
           .then(rsp => rsp.json())
           .then(data => {
-            console.log("data", data);
-            datasources.map_anns.columns = data.columns;
-            renderTable();
+            console.log("rsp", data);
+            // Need 'columns' [{'name': "Name"}] and 'rows' 2D list
+            let columns = data.keys.map(c => {return {"name": c}});
+            let imgData = data.data;
+            // parseInt just so we can sort
+            let imgIds = Object.keys(imgData).map(k => parseInt(k));
+            imgIds.sort();
+            // each row starts with iid, followed by values (list) for each column.
+            let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid]?.[c.name]?.join(", ") || "")))
+            columns = [{"name": "Image"}].concat(columns);
+            datasources.addTable(tableId, {columns, rows});
           })
       }
       datasources.map_anns.display = checked;
       renderTable();
-    });
+    };
   </script>
 </html>

@@ -33,6 +33,8 @@ Do the same with `omero-mdv`. Clone this repo, then:
 
     $ omero config append omero.web.open_with '["MDV", "mdv_choose_data", {"supported_objects": ["project", "dataset"]}]'
 
+    $ omero config append omero.web.ui.top_links '["MDV", "open_mdv", {"title": "Open Multi-Dimensional-Viewer", "target": "_blank"}]'
+
 ```
 
 # Running Django dev server

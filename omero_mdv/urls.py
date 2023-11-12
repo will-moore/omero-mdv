@@ -14,21 +14,29 @@ urlpatterns = [
     # page above loads table info via...
     re_path(r'^table_info/(?P<tableid>[0-9]+)/$', views.table_info, name='mdv_table_info'),
     # load map-annotations as if a table...
-    re_path(r'^mapann_info/(?P<projectid>[0-9]+)/$', views.mapann_info, name='mdv_mapann_info'),
+    re_path(r'^mapanns_info/(?P<projectid>[0-9]+)/$', views.mapanns_info, name='mdv_mapanns_info'),
+    re_path(r'^datasets_info/(?P<projectid>[0-9]+)/$', views.datasets_info, name='mdv_datasets_info'),
 
     # MDV viewer
-    # Currently we don't save configs, so a config ID is really an OMERO.table ID
-    re_path(r"^config/(?P<tableid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),
-    re_path(r"^config/(?P<tableid>[0-9]+)/state.json$", views.state, name='mdv_state'),
-    re_path(r"^config/(?P<tableid>[0-9]+)/views.json$", views.views, name='mdv_views'),
+    re_path(r"^config/(?P<configid>[0-9]+)/json/$", views.config_json, name='mdv_config_json'),
+    # save configs, so a config ID is the FileAnnotation ID for JSON
+    re_path(r"^config/(?P<configid>[0-9]+)/datasources.json$", views.datasources, name='mdv_datasources'),
+    # list configs
+    re_path(r'^open/$', views.list_mdv_configs, name="open_mdv"),
+    # delete config
+    re_path(r'^delete_mdv_config/$', views.delete_mdv_config, name="delete_mdv_config"),
+    
+    re_path(r"^config/(?P<configid>[0-9]+)/state.json$", views.state, name='mdv_state'),
+    re_path(r"^config/(?P<configid>[0-9]+)/views.json$", views.views, name='mdv_views'),
 
-    # We name a table datasource OMERO.table_ID, so we use that ID (ignore configid for now)
-    re_path(r"^config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),
-    re_path(r"^config/(?P<configid>[0-9]+)/OMERO.table_(?P<tableid>[0-9]+).b$", views.table_bytes),
+    # We name a table datasource mdv_config_ID, so we use that ID (ignore configid for now)
+    re_path(r"^config/(?P<configid>[0-9]+)/mdv_config_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),
+    re_path(r"^config/(?P<configid>[0-9]+)/mdv_config_(?P<tableid>[0-9]+).b$", views.table_bytes),
 
     re_path(r"^config/(?P<configid>[0-9]+)/thumbnail/(?P<imageid>[0-9]+).png$", views.thumbnail),
     re_path(r"^config/(?P<configid>[0-9]+)/image/(?P<imageid>[0-9]+).png$", views.image),
 
+    # POST here when user hits "Save" button on MDV
     re_path(r"^meths/execute_project_action/$", views.save_view),
 
     # Delegate all other requests from the viewer to statically-hosted files
