@@ -28,11 +28,14 @@ HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
 if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
     settings.MIDDLEWARE = settings.MIDDLEWARE + (HEADERS_MIDDLEWARE,)
 
+
 def charts_id(config_annid):
     return f"mdv_config_{config_annid}"
 
+
 def get_ann_id(config_id):
     return int(config_id.replace("mdv_config_", ""))
+
 
 @login_required()
 def choose_data(request, conn=None, **kwargs):
@@ -125,7 +128,7 @@ def submit_form(request, conn=None, **kwargs):
     if not request.method == 'POST':
         return HttpResponse("Need to use POST")
 
-    # Handle form data from index page 
+    # Handle form data from index page
     # redirect to mdv_viewer?dir=config/ANN_ID/
 
     file_ids = request.POST.getlist("file")
@@ -154,10 +157,12 @@ def submit_form(request, conn=None, **kwargs):
             for column_index, col in enumerate(tdata["columns"]):
                 if col["name"] == "Image":
                     r = conn.getSharedResources()
-                    t = r.openTable(omero.model.OriginalFileI(table_id), conn.SERVICE_OPTS)
+                    t = r.openTable(omero.model.OriginalFileI(
+                        table_id), conn.SERVICE_OPTS)
                     ids = get_column_values(t, column_index)
                     primary_keys["Image"] = ids
-        group_id = conn.getObject("OriginalFile", table_id).getDetails().group.id.val
+        group_id = conn.getObject(
+            "OriginalFile", table_id).getDetails().group.id.val
         for idx, col in enumerate(tdata["columns"]):
             col["omero_table_file_id"] = table_id
             col["omero_table_column"] = idx
@@ -168,87 +173,88 @@ def submit_form(request, conn=None, **kwargs):
 
     # Handle KVPs and Datasets in the same way...
     for form_input in ["mapanns", "datasets"]:
-      kvp_parent = request.POST.get(form_input)
-      if kvp_parent is not None:
-        # Load ALL Key-Value pairs in MDV format and save to config!!!!!!
-        obj_id = int(kvp_parent.split("-")[1])
-        # TODO: support other Object types instead of only 'project'
-        if kvp_parent.startswith("project-"):
-            if group_id is None:
-                group_id = conn.getObject("Project", obj_id).getDetails().group.id.val
-            # Map-Anns and Datasets loaded in the same format...
-            if form_input == "mapanns":
-                rsp = mapanns_by_id(conn, obj_id)
-            else:
-                rsp = datasets_by_id(conn, obj_id)
-            kvp_by_id = rsp["data"]
-            kvp_keys = rsp["keys"]
+        kvp_parent = request.POST.get(form_input)
+        if kvp_parent is not None:
+            # Load ALL Key-Value pairs in MDV format and save to config!!!!!!
+            obj_id = int(kvp_parent.split("-")[1])
+            # TODO: support other Object types instead of only 'project'
+            if kvp_parent.startswith("project-"):
+                if group_id is None:
+                    group_id = conn.getObject(
+                        "Project", obj_id).getDetails().group.id.val
+                # Map-Anns and Datasets loaded in the same format...
+                if form_input == "mapanns":
+                    rsp = mapanns_by_id(conn, obj_id)
+                else:
+                    rsp = datasets_by_id(conn, obj_id)
+                kvp_by_id = rsp["data"]
+                kvp_keys = rsp["keys"]
 
-            # TODO: If we DO have primary keys,
-            if "Image" not in primary_keys:
-                iids = list(kvp_by_id.keys())
-                iids.sort()
-                primary_keys["Image"] = iids
-                # Create an "Image" column
-                img_bytes = get_column_bytes(iids)
-                byte_count = len(img_bytes)
-                columns.append({
-                    "name": "Image",
-                    "field": "Image",
-                    "datatype": "integer",
-                    "bytes": [bytes_offset, bytes_offset + byte_count],
-                    "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
-                })
-                bytes_offset += byte_count
+                # TODO: If we DO have primary keys,
+                if "Image" not in primary_keys:
+                    iids = list(kvp_by_id.keys())
+                    iids.sort()
+                    primary_keys["Image"] = iids
+                    # Create an "Image" column
+                    img_bytes = get_column_bytes(iids)
+                    byte_count = len(img_bytes)
+                    columns.append({
+                        "name": "Image",
+                        "field": "Image",
+                        "datatype": "integer",
+                        "bytes": [bytes_offset, bytes_offset + byte_count],
+                        "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
+                    })
+                    bytes_offset += byte_count
 
-            for colname in kvp_keys:
-                # create column with list of all known 'values' 
-                # and the data is the index
-                # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype--mulitext
-                # [ "A,B,C", "B,A", "A,B", "D,E", "E,C,D" ]
-                # would be converted to
-                # values:["A","B","C","D","E"]
-                # stringLength:3
-                # data:[0,1,2, 1,0,65535, 0,1,65535, 3,4,65535, 0,2,3] //(Uint16Array)
+                for colname in kvp_keys:
+                    # create column with list of all known 'values'
+                    # and the data is the index
+                    # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype--mulitext
+                    # [ "A,B,C", "B,A", "A,B", "D,E", "E,C,D" ]
+                    # would be converted to
+                    # values:["A","B","C","D","E"]
+                    # stringLength:3
+                    # data:[0,1,2, 1,0,65535, 0,1,65535, 3,4,65535, 0,2,3] //(Uint16Array)
 
-                # first get ALL values for this key...
-                vals = set()
-                max_value_count = 0
-                for key_vals in kvp_by_id.values():
-                    # handle multiple values for a key
-                    obj_vals = key_vals.get(colname, [])
-                    max_value_count = max(max_value_count, len(obj_vals))
-                    vals.update(obj_vals)
+                    # first get ALL values for this key...
+                    vals = set()
+                    max_value_count = 0
+                    for key_vals in kvp_by_id.values():
+                        # handle multiple values for a key
+                        obj_vals = key_vals.get(colname, [])
+                        max_value_count = max(max_value_count, len(obj_vals))
+                        vals.update(obj_vals)
 
-                # TODO: if all vals are Numbers, create an "integer" or "double" column!
-                vals = list(vals)
-                vals.sort()
+                    # TODO: if all vals are Numbers, create an "integer" or "double" column!
+                    vals = list(vals)
+                    vals.sort()
 
-                # Now, for each row/image, convert KVP values into indicies
-                kvp_data = []
-                for iid in primary_keys["Image"]:
-                    obj_kvp = kvp_by_id[iid]
-                    indices = []
-                    if colname in obj_kvp:
-                        obj_vals = obj_kvp[colname]
-                        indices = [vals.index(v) for v in obj_vals]
-                    for fill in range(max_value_count - len(indices)):
-                        indices.append(65535)
-                    kvp_data.extend(indices)
+                    # Now, for each row/image, convert KVP values into indicies
+                    kvp_data = []
+                    for iid in primary_keys["Image"]:
+                        obj_kvp = kvp_by_id[iid]
+                        indices = []
+                        if colname in obj_kvp:
+                            obj_vals = obj_kvp[colname]
+                            indices = [vals.index(v) for v in obj_vals]
+                        for fill in range(max_value_count - len(indices)):
+                            indices.append(65535)
+                        kvp_data.extend(indices)
 
-                byte_count = len(get_column_bytes(kvp_data))
+                    byte_count = len(get_column_bytes(kvp_data))
 
-                col = {
-                    "name": colname,
-                    "datatype": "text" if max_value_count == 1 else "multitext",
-                    "values": vals,
-                    "data": kvp_data,
-                    "bytes": [bytes_offset, bytes_offset + byte_count]
-                }
-                if max_value_count > 1:
-                    col["stringLength"] = max_value_count
-                columns.append(col)
-                bytes_offset += byte_count
+                    col = {
+                        "name": colname,
+                        "datatype": "text" if max_value_count == 1 else "multitext",
+                        "values": vals,
+                        "data": kvp_data,
+                        "bytes": [bytes_offset, bytes_offset + byte_count]
+                    }
+                    if max_value_count > 1:
+                        col["stringLength"] = max_value_count
+                    columns.append(col)
+                    bytes_offset += byte_count
 
     datasrcs = {
         "parent_type": "project",
@@ -265,7 +271,8 @@ def submit_form(request, conn=None, **kwargs):
         return JsonResponse({"Error": "No data chosen"})
     conn.SERVICE_OPTS.setOmeroGroup(group_id)
 
-    ann_id = save_text_to_file_annotation(conn, config_json, mdv_name, JSON_FILEANN_NS)
+    ann_id = save_text_to_file_annotation(
+        conn, config_json, mdv_name, JSON_FILEANN_NS)
 
     # redirect to app, with absolute config URL...
     url = reverse("mdv_index")
@@ -282,7 +289,8 @@ def index(request, **kwargs):
     # home page of the mdv app - return index.html
     csrf_token = get_token(request)
     template = render_to_string("mdv/index.html", {}, request)
-    template = template.replace("</body>", "<script>window.CSRF_TOKEN='%s'</script></body>" % csrf_token)
+    template = template.replace(
+        "</body>", "<script>window.CSRF_TOKEN='%s'</script></body>" % csrf_token)
 
     return HttpResponse(template)
 
@@ -316,7 +324,7 @@ def save_view(request, conn=None, **kwargs):
 def mdv_static(request, url):
     """
     The MDV viewer requests all static files with relative URLs.
-    
+
     So we need to redirect
     e.g 'assets/mdv.js' to `static/omero-mdv/assets/mdv.js`
     """
@@ -344,7 +352,7 @@ def state(request, configid, conn=None, **kwargs):
 
 def _table_cols_byte_offsets(configid, conn, clear_cache=False):
     """Returns a dict of {'col_name': [start_byte, end_byte]}"""
-    
+
     # Load
     config_json = _config_json(conn, configid)
 
@@ -380,7 +388,8 @@ def table_bytes(request, configid, conn=None, **kwargs):
     byte2 = int(g[1]) if g[1] else None
 
     if byte1 is None or byte2 is None:
-        raise Http404("No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
+        raise Http404(
+            "No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
     size = byte2 - byte1
 
     # get data from config...
@@ -431,7 +440,7 @@ def get_columns(mdv_config):
 
     for col in mdv_config["columns"]:
         colname = col["name"]
-        increment= 1
+        increment = 1
         # avoid duplicate names - TODO: move this to submit()
         while colname in column_names:
             colname = col["name"] + f"{len(column_names)}"
@@ -442,7 +451,7 @@ def get_columns(mdv_config):
 
         # remove 'data' for map-ann/dataset columns
         if "data" in col:
-            del(col["data"])
+            del (col["data"])
         columns.append(col)
 
     return columns
@@ -502,7 +511,6 @@ def views(request, configid, conn=None, **kwargs):
     })
     pos_x = pos_x + chart_width + gap
 
-
     # If we have multiple number columns, add Scatter Plot...
     # if len(number_cols) > 1:
     #     views.append({
@@ -522,7 +530,6 @@ def views(request, configid, conn=None, **kwargs):
     #         ]
     #     })
     #     pos_x = pos_x + chart_width + gap
-
 
     if image_col:
         views.append({
@@ -573,7 +580,6 @@ def views(request, configid, conn=None, **kwargs):
         })
         pos_x = pos_x + chart_width + gap
 
-
     vw = {
         "main": {
             "initialCharts": {
@@ -615,18 +621,18 @@ def datasources(request, configid, conn=None, **kwargs):
             "name": "mdv_config_%s" % configid,
             "size": config_json["size"],
             "images": {
-            "composites": {
-                "base_url": "./images/",
-                "type": "png",
-                "key_column": "Image"
-            }
+                "composites": {
+                    "base_url": "./images/",
+                    "type": "png",
+                    "key_column": "Image"
+                }
             },
             "large_images": {
-            "composites": {
-                "base_url": "./images/",
-                "type": "png",
-                "key_column": "Image"
-            }
+                "composites": {
+                    "base_url": "./images/",
+                    "type": "png",
+                    "key_column": "Image"
+                }
             },
             "columns": columns
         }
@@ -681,18 +687,18 @@ def table_datasources(request, tableid, conn=None, **kwargs):
             "name": "OMERO.table_%s" % tableid,
             "size": row_count,
             "images": {
-            "composites": {
-                "base_url": "./images/",
-                "type": "png",
-                "key_column": "Image"
-            }
+                "composites": {
+                    "base_url": "./images/",
+                    "type": "png",
+                    "key_column": "Image"
+                }
             },
             "large_images": {
-            "composites": {
-                "base_url": "./images/",
-                "type": "png",
-                "key_column": "Image"
-            }
+                "composites": {
+                    "base_url": "./images/",
+                    "type": "png",
+                    "key_column": "Image"
+                }
             },
             "columns": cols_data
         }

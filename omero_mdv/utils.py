@@ -22,16 +22,16 @@ def get_mdv_ann(conn, file_id):
     params.addId(file_id)
 
     query = ("select annLink from AnnotationAnnotationLink as annLink "
-                 "join fetch annLink.child as child "
-                 "join fetch annLink.parent as parent "
-                 "where parent.file.id=:id"
-                 )
-    
+             "join fetch annLink.child as child "
+             "join fetch annLink.parent as parent "
+             "where parent.file.id=:id"
+             )
+
     result = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
     if len(result) == 0:
         return None
-    
+
     ann = result[0].child
     return {"id": ann.id.val, "textValue": ann.textValue.val}
 
@@ -44,9 +44,9 @@ def add_mdv_ann(conn, file_id, text):
     params.addId(file_id)
 
     query = ("select ann from FileAnnotation as ann "
-                 "where ann.file.id=:id"
-                 )
-    
+             "where ann.file.id=:id"
+             )
+
     result = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
     if len(result) == 0:
         raise AttributeError("No table found: %s" % file_id)
@@ -125,12 +125,12 @@ def list_file_anns(conn, namespace):
             'canEdit': fa['obj_details_permissions'].get('canEdit')
         }
         rsp.append(fig_file)
-    
+
     return rsp
 
 
 def save_text_to_file_annotation(conn, text, filename, ns):
-# Save JSON to file annotation...
+    # Save JSON to file annotation...
     update = conn.getUpdateService()
     text = text.encode('utf8')
     # Create new file
@@ -197,7 +197,7 @@ def get_mapann_data(conn, projectid):
             join fetch plink.parent as project
             where project.id=:id
             and ch.class=MapAnnotation"""
-    
+
     result = qs.findAllByQuery(query, params, conn.SERVICE_OPTS)
 
     # need {key: {iid: value} }
@@ -258,7 +258,7 @@ def table_to_mdv_columns(conn, tableid):
             cols_data.append(col_data)
     finally:
         t.close()
-    
+
     return {'columns': cols_data, 'row_count': row_count}
 
 
