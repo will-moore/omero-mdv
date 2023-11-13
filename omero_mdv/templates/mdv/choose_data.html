@@ -1,78 +1,21 @@
 <html>
   <head>
-    <style>
-      body {
-        font-family: Arial, Helvetica, sans-serif;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      h2,
-      h3 {
-        font-weight: 400;
-      }
-      h2 {
-        margin: 0 0 10px 0;
-      }
-      ul {
-        list-style: none;
-        padding: 0;
-      }
-      header {
-        background: #333;
-        height: 48px;
-        flex: auto;
-      }
-      main {
-        margin: 20px;
-      }
-      th {
-        font-weight: 100;
-      }
-      #datasources {
-        display: flex;
-        justify-content: flex-start;
-        color: #999;
-      }
-      table {
-        float: left;
-        border-collapse: collapse;
-        color: #999;
-      }
-      td,
-      th {
-        vertical-align: top;
-        border: solid #ddd 1px;
-        padding: 5px;
-        border-collapse: collapse;
-      }
-      form {
-        border: solid #ddd 1px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-        padding: 10px;
-        position: absolute;
-        top: 100px;
-        left: 50%;
-        width: 500px;
-        margin-left: -250px;
-      }
-      button[type="submit"] {
-        float: right;
-      }
-    </style>
+    <link href="{% static 'mdv/choose_data.css' %}" rel="stylesheet" />
   </head>
   <body>
-    <header></header>
+    <nav>
+      <h1>OMERO.MDV</h1>
+    </nav>
     <main>
-      <form method="post" action="{% url 'mdv_submit_form' %}">
+      {% block main %}
+      <article>
+      <form class="choose_data" method="post" action="{% url 'mdv_submit_form' %}">
         <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
         {% csrf_token %}
         <label
           >MDV Project name: <input name="mdv_name" value="{{obj.name}}"
         /></label>
-        <h3>OMERO.tables</h3>
+        <h3>OMERO.tables:</h3>
         <ul>
           {% for ann in anns %}
           <li>
@@ -80,9 +23,6 @@
               <input name="file" type="radio" value="{{ann.file.id}}" />
               File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
-            <a target="_blank" href="{% url 'omero_table' ann.file.id %}"
-              >View Table</a
-            >
           </li>
           {% endfor %}
         </ul>
@@ -108,12 +48,15 @@
           Datasets
         </label>
 
-        <br />
-        <button type="submit">OK</button>
+        <footer>
+          <button disabled type="submit" title="Please choose some data above">OK</button>
+        </footer>
       </form>
-      <table id="datasources">
+      </article>
+      <div id="datasources">
         <!-- lit-html adds <table> here -->
-      </table>
+      </div>
+      {% endblock %}
     </main>
   </body>
 
@@ -176,12 +119,18 @@
     datasources.addEventListener("dataAdded", (e) => {renderTable()})
 
 
+    function enableSubmit() {
+      let btn = document.querySelector("button[type='submit']")
+      btn.removeAttribute("disabled");
+      btn.setAttribute("title", "Submit!");
+    }
+
     // Handle click on Tables checkbox...
     // document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
     function handleTableClick(event) {
       const checked = event.target.checked;
       const tableId = event.target.value;
-      console.log("tableId", tableId);
+      enableSubmit();
       // if data not loaded...
       if (!datasources.omero_tables[tableId]) {
         datasources.addTable(tableId, {columns: [], display: false});
@@ -211,6 +160,7 @@
     document.getElementById("datasetsCheckbox").addEventListener("click", loadDataSource);
 
     function loadDataSource (event) {
+      enableSubmit();
       const checked = event.target.checked;
       let name = event.target.getAttribute("name");
       // if data not loaded...

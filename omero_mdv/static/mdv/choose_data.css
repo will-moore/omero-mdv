@@ -1,0 +1,118 @@
+body {
+    font-family: "Overpass", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+  nav {
+    background: #343a40;
+    flex: 0 0 48px;
+    color: #fff;
+    font-weight: 300;
+  }
+  nav h1 {
+    font-weight: 300;
+    margin: 10px 15px;
+  }
+  main {
+    overflow: auto;
+    flex: 1 1 auto;
+    /* https://uigradients.com/#Ash */
+    background: #606c88;  /* fallback for old browsers */
+    background: -webkit-linear-gradient(to right, #3f4c6b, #606c88);  /* Chrome 10-25, Safari 5.1-6 */
+    background: linear-gradient(to right, #3f4c6b, #606c88); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+  }
+  h2,
+  h3 {
+    font-weight: 400;
+  }
+  h2 {
+    margin: 0 -15px 15px -15px;
+    padding: 15px;
+    padding-top: 0;
+    border-bottom: solid #ddd 1px;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+    line-height: 1.5em;
+  }
+  #datasources {
+    margin: 15px;
+    display: flex;
+    justify-content: flex-start;
+    color: #999;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    /* border-top: solid #ddd 1px; */
+    box-sizing: border-box;
+  }
+  table {
+    float: left;
+    border-collapse: collapse;
+    color: #999;
+    /* border-top: solid #ddd 1px; */
+  }
+  td,
+  th {
+    vertical-align: top;
+    border: solid #ddd 1px;
+    padding: 5px;
+    border-collapse: collapse;
+  }
+  th {
+    font-weight: 400;
+    position: sticky;
+    top: 0px;
+    padding: 10px;
+    background: repeating-linear-gradient(180deg,#ddd 0px, #ddd 1px,#3f4c6b 1px, #3f4c6b 1000px);
+    border-top: 0;
+  }
+  article {
+    border: solid #ddd 1px;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    padding: 15px;
+    position: absolute;
+    top: 100px;
+    left: 50%;
+    width: 500px;
+    margin-left: -250px;
+    z-index: 10;
+  }
+  button[type="submit"] {
+    cursor: pointer;
+    float: right;
+    color: #fff;
+    background: #0f0c29;  /* fallback for old browsers */
+    background: -webkit-linear-gradient(to right, #24243e, #302b63, #0f0c29);  /* Chrome 10-25, Safari 5.1-6 */
+    background: linear-gradient(to right, #24243e, #302b63, #0f0c29); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+    border-color: #0f0c29;
+    display: inline-block;
+    font-weight: 400;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    padding: 0.375rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    border-radius: 0.25rem;
+    transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+  }
+  button:disabled {
+    opacity: 0.7;
+    cursor: default;
+  }
+  form footer {
+    margin: 10px -15px 0 -15px;
+    padding: 15px;
+    padding-bottom: 0;
+    border-top: solid #ddd 1px;
+  }
