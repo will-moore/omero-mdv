@@ -70,7 +70,7 @@ body {
     background: repeating-linear-gradient(180deg,#ddd 0px, #ddd 1px,#3f4c6b 1px, #3f4c6b 1000px);
     border-top: 0;
   }
-  form {
+  article {
     border: solid #ddd 1px;
     background: white;
     border-radius: 15px;

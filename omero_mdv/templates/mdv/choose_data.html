@@ -7,13 +7,15 @@
       <h1>OMERO.MDV</h1>
     </nav>
     <main>
-      <form method="post" action="{% url 'mdv_submit_form' %}">
+      {% block main %}
+      <article>
+      <form class="choose_data" method="post" action="{% url 'mdv_submit_form' %}">
         <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
         {% csrf_token %}
         <label
           >MDV Project name: <input name="mdv_name" value="{{obj.name}}"
         /></label>
-        <h3>OMERO.tables</h3>
+        <h3>OMERO.tables:</h3>
         <ul>
           {% for ann in anns %}
           <li>
@@ -50,9 +52,11 @@
           <button disabled type="submit" title="Please choose some data above">OK</button>
         </footer>
       </form>
+      </article>
       <div id="datasources">
         <!-- lit-html adds <table> here -->
       </div>
+      {% endblock %}
     </main>
   </body>
 
