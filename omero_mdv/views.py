@@ -19,7 +19,7 @@ from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
     get_text_indices, get_column_bytes, datasets_by_id, mapanns_by_id, update_file_ann, \
-    save_text_to_file_annotation, get_column_values
+    save_text_to_file_annotation, get_column_values, marshal_mdv_column
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -208,53 +208,9 @@ def submit_form(request, conn=None, **kwargs):
                     bytes_offset += byte_count
 
                 for colname in kvp_keys:
-                    # create column with list of all known 'values'
-                    # and the data is the index
-                    # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype--mulitext
-                    # [ "A,B,C", "B,A", "A,B", "D,E", "E,C,D" ]
-                    # would be converted to
-                    # values:["A","B","C","D","E"]
-                    # stringLength:3
-                    # data:[0,1,2, 1,0,65535, 0,1,65535, 3,4,65535, 0,2,3] //(Uint16Array)
-
-                    # first get ALL values for this key...
-                    vals = set()
-                    max_value_count = 0
-                    for key_vals in kvp_by_id.values():
-                        # handle multiple values for a key
-                        obj_vals = key_vals.get(colname, [])
-                        max_value_count = max(max_value_count, len(obj_vals))
-                        vals.update(obj_vals)
-
-                    # TODO: if all vals are Numbers, create an "integer" or "double" column!
-                    vals = list(vals)
-                    vals.sort()
-
-                    # Now, for each row/image, convert KVP values into indicies
-                    kvp_data = []
-                    for iid in primary_keys["Image"]:
-                        obj_kvp = kvp_by_id[iid]
-                        indices = []
-                        if colname in obj_kvp:
-                            obj_vals = obj_kvp[colname]
-                            indices = [vals.index(v) for v in obj_vals]
-                        for fill in range(max_value_count - len(indices)):
-                            indices.append(65535)
-                        kvp_data.extend(indices)
-
-                    byte_count = len(get_column_bytes(kvp_data))
-
-                    col = {
-                        "name": colname,
-                        "datatype": "text" if max_value_count == 1 else "multitext",
-                        "values": vals,
-                        "data": kvp_data,
-                        "bytes": [bytes_offset, bytes_offset + byte_count]
-                    }
-                    if max_value_count > 1:
-                        col["stringLength"] = max_value_count
+                    col = marshal_mdv_column(colname, kvp_by_id, primary_keys["Image"], bytes_offset)
                     columns.append(col)
-                    bytes_offset += byte_count
+                    bytes_offset = col["bytes"][1]
 
     datasrcs = {
         "parent_type": "project",
@@ -449,7 +405,9 @@ def get_columns(mdv_config):
         col["field"] = colname
         column_names.append(col["name"])
 
-        # remove 'data' for map-ann/dataset columns
+        # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
+        # This requires the MDV project including data to be fully saved into JSON config
+        # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
         if "data" in col:
             del (col["data"])
         columns.append(col)
@@ -561,7 +519,9 @@ def views(request, configid, conn=None, **kwargs):
             "title": "Summary",
             "legend": "",
             "type": "row_summary_box",
-            "param": column_names,
+            # columns values to show - We don't want any by default but [] fails.
+            # 'Image' isn't shown for some reason?
+            "param": [image_col["name"]],
             "image": {
                 "base_url": "./image/",
                 "type": "png",
