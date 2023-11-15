@@ -23,6 +23,8 @@ from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
+WEBCLIENT_LINK = "webclient link"
+
 # Ensure that middleware gets added
 HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
 if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
@@ -212,6 +214,8 @@ def submit_form(request, conn=None, **kwargs):
                     columns.append(col)
                     bytes_offset = col["bytes"][1]
 
+    columns.append(get_webclient_links_column(primary_keys["Image"], bytes_offset))
+
     datasrcs = {
         "parent_type": "project",
         "columns": columns,
@@ -235,6 +239,30 @@ def submit_form(request, conn=None, **kwargs):
     config_url = f"config/{ann_id}/"
 
     return HttpResponseRedirect("%s?dir=%s" % (url, config_url))
+
+
+def get_webclient_links_column(image_ids, bytes_offset):
+
+    indices = []
+    values = []
+
+    url = reverse("webindex")
+    for index, iid in enumerate(image_ids):
+        values.append(f"{url}?show=image-{iid}")
+        indices.append(index)
+
+    byte_count = len(get_column_bytes(indices))
+
+    col = {
+        "name": WEBCLIENT_LINK,
+        "field": WEBCLIENT_LINK,
+        "is_url": True,
+        "datatype": "text",
+        "values": values,
+        "bytes": [bytes_offset, bytes_offset + byte_count],
+        "data": indices,
+    }
+    return col
 
 
 # we don't really need login here, but if not logged-in then
@@ -395,15 +423,15 @@ def get_columns(mdv_config):
     column_names = []
 
     for col in mdv_config["columns"]:
-        colname = col["name"]
-        increment = 1
-        # avoid duplicate names - TODO: move this to submit()
-        while colname in column_names:
-            colname = col["name"] + f"{len(column_names)}"
-            increment += 1
-        col["name"] = colname
-        col["field"] = colname
-        column_names.append(col["name"])
+        # colname = col["name"]
+        # increment = 1
+        # # avoid duplicate names - TODO: move this to submit()
+        # while colname in column_names:
+        #     colname = col["name"] + f"{len(column_names)}"
+        #     increment += 1
+        # col["name"] = colname
+        # col["field"] = colname
+        # column_names.append(col["name"])
 
         # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
         # This requires the MDV project including data to be fully saved into JSON config
@@ -439,7 +467,7 @@ def views(request, configid, conn=None, **kwargs):
     column_names = []
 
     columns = get_columns(config_json)
-    column_names = [col["name"] for col in columns]
+    column_names = [col["name"] for col in columns if col["name"] != WEBCLIENT_LINK]
     image_col = None
     for idx, col in enumerate(columns):
         if col["name"].lower() == "image":
@@ -518,9 +546,7 @@ def views(request, configid, conn=None, **kwargs):
             "title": "Summary",
             "legend": "",
             "type": "row_summary_box",
-            # columns values to show - We don't want any by default but [] fails.
-            # 'Image' isn't shown for some reason?
-            "param": [image_col["name"]],
+            "param": [image_col["name"], WEBCLIENT_LINK],
             "image": {
                 "base_url": "./image/",
                 "type": "png",
