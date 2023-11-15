@@ -11,7 +11,7 @@ import gzip
 import omero
 from omero.rtypes import wrap, rlong, unwrap
 
-MDV_ANN_NAMESPACE = "omero-mdv.table_offsets"
+MDV_ANN_NAMESPACE = "omero-mdv_project.json"
 
 # if we have a number column with no value, what do we use?
 MISSING_NUMBER = 0
