@@ -405,10 +405,11 @@ def get_columns(mdv_config):
         col["field"] = colname
         column_names.append(col["name"])
 
-        # if we remove 'data' for map-ann/dataset columns, it is lazily loaded as bytes
-        # BUT that requires the MDV project including data to be fully saved into JSON config
-        # if "data" in col:
-        #     del (col["data"])
+        # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
+        # This requires the MDV project including data to be fully saved into JSON config
+        # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
+        if "data" in col:
+            del (col["data"])
         columns.append(col)
 
     return columns
@@ -518,7 +519,9 @@ def views(request, configid, conn=None, **kwargs):
             "title": "Summary",
             "legend": "",
             "type": "row_summary_box",
-            "param": column_names,
+            # columns values to show - We don't want any by default but [] fails.
+            # 'Image' isn't shown for some reason?
+            "param": [image_col["name"]],
             "image": {
                 "base_url": "./image/",
                 "type": "png",
