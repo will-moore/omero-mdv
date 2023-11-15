@@ -13,6 +13,8 @@ from omero.rtypes import wrap, rlong, unwrap
 
 MDV_ANN_NAMESPACE = "omero-mdv.table_offsets"
 
+# if we have a number column with no value, what do we use?
+MISSING_NUMBER = 0
 
 def get_mdv_ann(conn, file_id):
     """Get the MDV table_offsets Annotation linked to File Annotation"""
@@ -427,7 +429,7 @@ def marshal_mdv_column(colname, kvp_by_id, primary_key_ids, bytes_offset):
     byte_count = len(get_column_bytes(kvp_data))
 
     if datatype == "text" and max_value_count > 1:
-        datatype == "multitext"
+        datatype = "multitext"
     col = {
         "name": colname,
         "datatype": datatype,

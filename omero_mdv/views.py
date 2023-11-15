@@ -28,8 +28,6 @@ HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
 if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
     settings.MIDDLEWARE = settings.MIDDLEWARE + (HEADERS_MIDDLEWARE,)
 
-# if we have a number column with no value, what do we use?
-MISSING_NUMBER = 0
 
 def charts_id(config_annid):
     return f"mdv_config_{config_annid}"
