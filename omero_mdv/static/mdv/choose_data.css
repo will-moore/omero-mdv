@@ -43,8 +43,8 @@ body {
     display: flex;
     justify-content: flex-start;
     color: #999;
-    width: 100%;
-    height: 100%;
+    width: calc(100% - 30px);
+    height: calc(100% - 30px);
     overflow: auto;
     /* border-top: solid #ddd 1px; */
     box-sizing: border-box;
@@ -82,6 +82,8 @@ body {
     width: 500px;
     margin-left: -250px;
     z-index: 10;
+    max-height: calc(100% - 170px);
+    overflow: auto;
   }
   button[type="submit"] {
     cursor: pointer;
