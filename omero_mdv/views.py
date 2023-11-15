@@ -28,6 +28,8 @@ HEADERS_MIDDLEWARE = "omero_mdv.middleware.CrossOriginHeaders"
 if HEADERS_MIDDLEWARE not in settings.MIDDLEWARE:
     settings.MIDDLEWARE = settings.MIDDLEWARE + (HEADERS_MIDDLEWARE,)
 
+# if we have a number column with no value, what do we use?
+MISSING_NUMBER = 0
 
 def charts_id(config_annid):
     return f"mdv_config_{config_annid}"
@@ -227,30 +229,54 @@ def submit_form(request, conn=None, **kwargs):
                         vals.update(obj_vals)
 
                     # TODO: if all vals are Numbers, create an "integer" or "double" column!
+                    # columns is {"name": {"datatype": "integer|text|double"}}
+                    datatype = "integer"
                     vals = list(vals)
                     vals.sort()
+
+                    for val in vals:
+                        if datatype == "integer":
+                            try:
+                                int(val)
+                            except ValueError:
+                                datatype = "double"
+                        if datatype == "double":
+                            try:
+                                float(val)
+                            except ValueError:
+                                datatype = "text"
 
                     # Now, for each row/image, convert KVP values into indicies
                     kvp_data = []
                     for iid in primary_keys["Image"]:
                         obj_kvp = kvp_by_id[iid]
                         indices = []
-                        if colname in obj_kvp:
-                            obj_vals = obj_kvp[colname]
-                            indices = [vals.index(v) for v in obj_vals]
-                        for fill in range(max_value_count - len(indices)):
-                            indices.append(65535)
-                        kvp_data.extend(indices)
+                        if datatype == "text":
+                            if colname in obj_kvp:
+                                obj_vals = obj_kvp[colname]
+                                indices = [vals.index(v) for v in obj_vals]
+                            for fill in range(max_value_count - len(indices)):
+                                indices.append(65535)
+                            kvp_data.extend(indices)
+                        else:
+                            # for number columns, we don't handle multiple Values for a Key...
+                            obj_vals = obj_kvp.get(colname, [MISSING_NUMBER])
+                            #...just pick first
+                            number_val = int(obj_vals[0]) if datatype == "integer" else float(obj_vals[0])
+                            kvp_data.append(number_val)
 
                     byte_count = len(get_column_bytes(kvp_data))
 
+                    if datatype == "text" and max_value_count > 1:
+                        datatype == "multitext"
                     col = {
                         "name": colname,
-                        "datatype": "text" if max_value_count == 1 else "multitext",
-                        "values": vals,
+                        "datatype": datatype,
                         "data": kvp_data,
                         "bytes": [bytes_offset, bytes_offset + byte_count]
                     }
+                    if "text" in datatype:
+                        col["values"] = vals
                     if max_value_count > 1:
                         col["stringLength"] = max_value_count
                     columns.append(col)
