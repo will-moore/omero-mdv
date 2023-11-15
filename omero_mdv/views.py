@@ -19,7 +19,7 @@ from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
     get_text_indices, get_column_bytes, datasets_by_id, mapanns_by_id, update_file_ann, \
-    save_text_to_file_annotation, get_column_values
+    save_text_to_file_annotation, get_column_values, marshal_mdv_column
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -210,77 +210,9 @@ def submit_form(request, conn=None, **kwargs):
                     bytes_offset += byte_count
 
                 for colname in kvp_keys:
-                    # create column with list of all known 'values'
-                    # and the data is the index
-                    # https://github.com/Taylor-CCB-Group/MDV/blob/main/docs/extradocs/datasource.md#datatype--mulitext
-                    # [ "A,B,C", "B,A", "A,B", "D,E", "E,C,D" ]
-                    # would be converted to
-                    # values:["A","B","C","D","E"]
-                    # stringLength:3
-                    # data:[0,1,2, 1,0,65535, 0,1,65535, 3,4,65535, 0,2,3] //(Uint16Array)
-
-                    # first get ALL values for this key...
-                    vals = set()
-                    max_value_count = 0
-                    for key_vals in kvp_by_id.values():
-                        # handle multiple values for a key
-                        obj_vals = key_vals.get(colname, [])
-                        max_value_count = max(max_value_count, len(obj_vals))
-                        vals.update(obj_vals)
-
-                    # TODO: if all vals are Numbers, create an "integer" or "double" column!
-                    # columns is {"name": {"datatype": "integer|text|double"}}
-                    datatype = "integer"
-                    vals = list(vals)
-                    vals.sort()
-
-                    for val in vals:
-                        if datatype == "integer":
-                            try:
-                                int(val)
-                            except ValueError:
-                                datatype = "double"
-                        if datatype == "double":
-                            try:
-                                float(val)
-                            except ValueError:
-                                datatype = "text"
-
-                    # Now, for each row/image, convert KVP values into indicies
-                    kvp_data = []
-                    for iid in primary_keys["Image"]:
-                        obj_kvp = kvp_by_id[iid]
-                        indices = []
-                        if datatype == "text":
-                            if colname in obj_kvp:
-                                obj_vals = obj_kvp[colname]
-                                indices = [vals.index(v) for v in obj_vals]
-                            for fill in range(max_value_count - len(indices)):
-                                indices.append(65535)
-                            kvp_data.extend(indices)
-                        else:
-                            # for number columns, we don't handle multiple Values for a Key...
-                            obj_vals = obj_kvp.get(colname, [MISSING_NUMBER])
-                            #...just pick first
-                            number_val = int(obj_vals[0]) if datatype == "integer" else float(obj_vals[0])
-                            kvp_data.append(number_val)
-
-                    byte_count = len(get_column_bytes(kvp_data))
-
-                    if datatype == "text" and max_value_count > 1:
-                        datatype == "multitext"
-                    col = {
-                        "name": colname,
-                        "datatype": datatype,
-                        "data": kvp_data,
-                        "bytes": [bytes_offset, bytes_offset + byte_count]
-                    }
-                    if "text" in datatype:
-                        col["values"] = vals
-                    if max_value_count > 1:
-                        col["stringLength"] = max_value_count
+                    col = marshal_mdv_column(colname, kvp_by_id, primary_keys["Image"], bytes_offset)
                     columns.append(col)
-                    bytes_offset += byte_count
+                    bytes_offset = col["bytes"][1]
 
     datasrcs = {
         "parent_type": "project",
