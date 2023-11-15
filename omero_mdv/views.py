@@ -430,11 +430,10 @@ def views(request, configid, conn=None, **kwargs):
         return JsonResponse(rsp)
 
     # ...otherwise generate an initial view from scratch...
-    pos_x = 0
-    pos_y = 0
-    chart_width = 500
-    chart_height = 500
-    gap = 10
+    grid_x = 0
+    grid_y = 0
+    chart_size_x = 4
+    chart_size_y = 4
 
     views = []
     column_names = []
@@ -457,17 +456,17 @@ def views(request, configid, conn=None, **kwargs):
         "type": "table_chart",
         "param": column_names,
         "id": "table_chart_%s" % configid,
-        "size": [
-            chart_width,
-            chart_height
-        ],
         "column_widths": col_widths,
-        "position": [
-            pos_x,
-            pos_y
+        "gsposition": [
+            grid_x,
+            grid_y
+        ],
+        "gssize": [
+            chart_size_x,
+            chart_size_y
         ]
     })
-    pos_x = pos_x + chart_width + gap
+    grid_x = grid_x + chart_size_x
 
     # If we have multiple number columns, add Scatter Plot...
     # if len(number_cols) > 1:
@@ -501,17 +500,17 @@ def views(request, configid, conn=None, **kwargs):
                 "type": "png"
             },
             "id": "6qxshC",
-            "size": [
-                chart_width,
-                chart_height
-            ],
             "image_width": 96,
-            "position": [
-                pos_x,
-                pos_y
+            "gsposition": [
+                grid_x,
+                grid_y
+            ],
+            "gssize": [
+                chart_size_x,
+                chart_size_y
             ]
         })
-        pos_x = pos_x + chart_width + gap
+        grid_x = grid_x + chart_size_x
 
     # Show a summary - selected Image (if we have Images)
     if image_col:
@@ -528,23 +527,24 @@ def views(request, configid, conn=None, **kwargs):
                 "param": image_col_index
             },
             "id": "XulQsf",
-            "size": [
-                chart_width,
-                chart_height
+            # "image_width": chart_width,
+            "gsposition": [
+                grid_x,
+                grid_y
             ],
-            "image_width": chart_width,
-            "position": [
-                pos_x,
-                pos_y
+            "gssize": [
+                chart_size_x,
+                chart_size_y
             ]
         })
-        pos_x = pos_x + chart_width + gap
+        grid_x = grid_x + chart_size_x
 
     vw = {
         "main": {
             "initialCharts": {
                 charts_id(configid): views
-            }
+            },
+            "dataSources":{charts_id(configid):{"layout":"gridstack"}}
         }
     }
     return JsonResponse(vw)
