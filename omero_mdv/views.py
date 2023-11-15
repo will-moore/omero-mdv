@@ -407,9 +407,10 @@ def get_columns(mdv_config):
         col["field"] = colname
         column_names.append(col["name"])
 
-        # remove 'data' for map-ann/dataset columns
-        if "data" in col:
-            del (col["data"])
+        # if we remove 'data' for map-ann/dataset columns, it is lazily loaded as bytes
+        # BUT that requires the MDV project including data to be fully saved into JSON config
+        # if "data" in col:
+        #     del (col["data"])
         columns.append(col)
 
     return columns
