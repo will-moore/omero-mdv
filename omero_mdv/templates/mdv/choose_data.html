@@ -63,10 +63,10 @@
   </body>
 
   <script type="module">
-    let WEB_INDEX = "{% url 'webindex' %}";
-    let MDV_INDEX = "{% url 'mdv_index' %}";
-    let obj_type = "{{obj.type}}";
-    let obj_id = {{obj.id}};
+    const WEB_INDEX = "{% url 'webindex' %}";
+    const MDV_INDEX = "{% url 'mdv_index' %}";
+    const OBJ_TYPE = "{{obj.type}}";
+    const OBJ_ID = {{obj.id}};
 
     // NB: lit-html 3.0.0 available, but cdn broken just now!
     // import {html, render} from 'https://unpkg.com/lit-html?module';
@@ -170,13 +170,16 @@
       const checked = event.target.checked;
       let name = event.target.getAttribute("name");
       // if data not loaded...
-      const tableId = `${name}_${obj_id}`
+      const tableId = `${name}_${OBJ_ID}`
       if (!datasources.omero_tables[tableId]) {
         datasources.addTable(tableId, {columns: [], display: false});
       }
       if (checked && datasources.map_anns.columns.length == 0) {
-        // name is 'mapann' or 'datasets'
-        let map_anns_data = fetch(`${MDV_INDEX}${name}_info/${obj_id}/`)
+        // name is 'mapanns' or 'datasets'
+        // url is /mdv/mapanns_info/project/pid or /mdv/datasets/pid
+        let dtype = name == "datasets" ? "" : `${OBJ_TYPE}/`;
+        let url = `${MDV_INDEX}${name}_info/${dtype}${OBJ_ID}/`;
+        let map_anns_data = fetch(url)
           .then(rsp => rsp.json())
           .then(data => {
             console.log("rsp", data);

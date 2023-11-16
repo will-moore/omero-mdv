@@ -85,12 +85,14 @@ def datasets_info(request, projectid, conn=None, **kwargs):
 
 
 @login_required()
-def mapanns_info(request, projectid, conn=None, **kwargs):
+def mapanns_info(request, objtype, objid, conn=None, **kwargs):
     # for the 'choose_data' page, we don't load MDV formatted info...
     # return JsonResponse(_mapann_info(conn, projectid))
 
+    if objtype != "project":
+        raise Http404("Only 'project' supported just now")
     # ...instead load data in {'iid': {'key': 'values'}}
-    return JsonResponse(mapanns_by_id(conn, projectid))
+    return JsonResponse(mapanns_by_id(conn, objid))
 
 
 @login_required()
