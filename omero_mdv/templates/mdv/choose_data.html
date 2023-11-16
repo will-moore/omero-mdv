@@ -9,7 +9,7 @@
     <main>
       {% block main %}
       <article>
-      <form class="choose_data" method="post" action="{% url 'mdv_submit_form' %}">
+      <form id="choose_data_form" class="choose_data" method="post" action="{% url 'mdv_submit_form' %}">
         <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
         {% csrf_token %}
         <label
@@ -49,7 +49,9 @@
         </label>
 
         <footer>
-          <button disabled type="submit" title="Please choose some data above">OK</button>
+          <button disabled type="submit" title="Please choose some data above">
+              OK
+            </button>
         </footer>
       </form>
       </article>
@@ -153,6 +155,10 @@
     // bind click handler to omero.table checkboxes
     document.querySelectorAll("input[name='file']").forEach(i => i.addEventListener("click", handleTableClick));
 
+    // When user clicks Submit, disable the button while we wait for form to submit...
+    document.getElementById("choose_data_form").addEventListener("submit", function(event){
+      document.querySelector("button[type='submit']").setAttribute("disabled", "disabled");
+    })
 
     // Handle click on Map Annotations / Dataset checkboxes...
     // Both these load data in the same format...
