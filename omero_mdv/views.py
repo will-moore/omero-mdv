@@ -18,7 +18,7 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
-    get_text_indices, get_column_bytes, datasets_by_id, mapanns_to_mdv_columns, update_file_ann, \
+    get_text_indices, get_column_bytes, datasets_to_mdv_columns, mapanns_to_mdv_columns, update_file_ann, \
     save_text_to_file_annotation, get_column_values, marshal_mdv_column
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
@@ -81,7 +81,7 @@ def choose_data(request, conn=None, **kwargs):
 @login_required()
 def datasets_info(request, projectid, conn=None, **kwargs):
     # load data in {'iid': {'Dataset': 'name'}}
-    return JsonResponse(datasets_by_id(conn, projectid))
+    return JsonResponse({"columns": datasets_to_mdv_columns(conn, projectid)})
 
 
 @login_required()
@@ -170,6 +170,9 @@ def submit_form(request, conn=None, **kwargs):
         for idx, col in enumerate(tdata["columns"]):
             col["omero_table_file_id"] = table_id
             col["omero_table_column"] = idx
+            # don't want to store OMERO.tables data in json
+            if "data" in col:
+                del(col["data"])
 
         columns.extend(tdata["columns"])
         # update bytes, needed for KVP etc below...
@@ -192,33 +195,16 @@ def submit_form(request, conn=None, **kwargs):
                     image_ids = primary_keys.get("Image")
                     cols = mapanns_to_mdv_columns(conn, obj_id, primary_keys=image_ids, bytes_offset=bytes_offset)
                     columns.extend(cols)
+                    if image_ids is None:
+                        primary_keys["Image"] = cols[0]["data"]
                     bytes_offset = cols[-1]["bytes"][1]
                 else:
-                    rsp = datasets_by_id(conn, obj_id)
-                    kvp_by_id = rsp["data"]
-                    kvp_keys = rsp["keys"]
-
-                    # TODO: If we DO have primary keys,
-                    if "Image" not in primary_keys:
-                        iids = list(kvp_by_id.keys())
-                        iids.sort()
-                        primary_keys["Image"] = iids
-                        # Create an "Image" column
-                        img_bytes = get_column_bytes(iids)
-                        byte_count = len(img_bytes)
-                        columns.append({
-                            "name": "Image",
-                            "field": "Image",
-                            "datatype": "integer",
-                            "bytes": [bytes_offset, bytes_offset + byte_count],
-                            "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
-                        })
-                        bytes_offset += byte_count
-
-                    for colname in kvp_keys:
-                        col = marshal_mdv_column(colname, kvp_by_id, primary_keys["Image"], bytes_offset)
-                        columns.append(col)
-                        bytes_offset = col["bytes"][1]
+                    image_ids = primary_keys.get("Image")
+                    cols = datasets_to_mdv_columns(conn, obj_id, primary_keys=image_ids, bytes_offset=bytes_offset)
+                    columns.extend(cols)
+                    if image_ids is None:
+                        primary_keys["Image"] = cols[0]["data"]
+                    bytes_offset = cols[-1]["bytes"][1]
 
     columns.append(get_webclient_links_column(primary_keys["Image"], bytes_offset))
 

@@ -245,14 +245,16 @@ def table_to_mdv_columns(conn, tableid):
                 # "is_url": True,
             }
 
-            values = get_column_values(t, column_index)
+            data = get_column_values(t, column_index)
             if col_data["datatype"] == "text":
                 # we want to get all the values...
-                indices, vals = get_text_indices(values)
+                indices, values = get_text_indices(data)
                 # ...These are the unique values
-                col_data["values"] = vals
+                col_data["values"] = values
+                data = indices
 
-            col_bytes = get_column_bytes(values)
+            col_bytes = get_column_bytes(data)
+            col_data["data"] = data
             bytes_length = len(col_bytes)
             col_data['bytes'] = [offset, offset + bytes_length]
             offset = offset + bytes_length
@@ -264,8 +266,7 @@ def table_to_mdv_columns(conn, tableid):
     return {'columns': cols_data, 'row_count': row_count}
 
 
-def datasets_by_id(conn, projectid):
-    # load data in {'iid': {'Dataset Name': ['name', 'name2]}}
+def datasets_to_mdv_columns(conn, projectid, primary_keys=None, bytes_offset=0):
 
     params = omero.sys.ParametersI()
     params.addId(projectid)
@@ -278,13 +279,37 @@ def datasets_by_id(conn, projectid):
         join pl.parent as project where project.id=:id
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = defaultdict(lambda: defaultdict(list))
+    kvp_by_id = defaultdict(lambda: defaultdict(list))
     for img in results:
         img_id = img.id.val
         for dsl in img.copyDatasetLinks():
             # List handles case of Image in 2 Datasets
-            rsp[img_id]["Dataset_Name"].append(dsl.parent.name.val)
-    return {"data": rsp, "keys": ["Dataset_Name"]}
+            kvp_by_id[img_id]["Dataset_Name"].append(dsl.parent.name.val)
+    # return {"data": rsp, "keys": ["Dataset_Name"]}
+
+    columns = []
+    # TODO: If we DO have primary keys,
+    if primary_keys is None:
+        iids = list(kvp_by_id.keys())
+        iids.sort()
+        primary_keys = iids
+        # Create an "Image" column
+        img_bytes = get_column_bytes(iids)
+        byte_count = len(img_bytes)
+        columns.append({
+            "name": "Image",
+            "field": "Image",
+            "datatype": "integer",
+            "bytes": [bytes_offset, bytes_offset + byte_count],
+            "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
+        })
+        bytes_offset += byte_count
+
+    col = marshal_mdv_column("Dataset_Name", kvp_by_id, primary_keys, bytes_offset)
+    columns.append(col)
+    bytes_offset = col["bytes"][1]
+
+    return columns
 
 
 def mapanns_to_mdv_columns(conn, projectid, primary_keys=None, bytes_offset=0):

@@ -76,13 +76,62 @@
     class DataModel extends EventTarget {
 
       // each table item is {id: {columns:[], etc} }
-      omero_tables = {}
-      map_anns = {columns: [], display: false}
+      omero_tables = []
+      // map-anns, datasets, tags etc have columns in mdv format
+      // but the data is not ordered
+      unordered_data = []
 
+      // Expect a single Table, which is "ordered"
+      // tableData has mdv "columns"
       addTable(tableId, tableData) {
         console.log("ADD_TABLE!! ", tableId, tableData)
-        this.omero_tables[tableId] = tableData;
+        tableData.id = tableId
+        this.omero_tables.push(tableData);
         this.dispatchEvent(new CustomEvent("dataAdded", {}));
+      }
+
+      // Handles "unordered" data: Map-Anns and Datasets
+      // tableData has mdv "columns"
+      addMapAnns(sourceId, tableData) {
+        console.log("ADD MAP-ANNS! ", tableData)
+        tableData.id = sourceId
+        this.unordered_data.push(tableData);
+        this.dispatchEvent(new CustomEvent("dataAdded", {}));
+      }
+
+      getColumns() {
+        let cols = [this.omero_tables, this.unordered_data].flatMap(dsrc => dsrc.flatMap(ds => ds.columns));
+        return cols;
+      }
+
+      getRowData() {
+        const cols = this.getColumns();
+        if (cols.length == 0) {
+          return [];
+        }
+
+        function getVal(column, rowIndex) {
+          if (column.datatype == "double" || column.datatype == "integer") {
+            return column.data[rowIndex];
+          }
+          if (column.datatype == "text") {
+            let idx = column.data[rowIndex];
+            return idx == 65535 ? "" : column.values[idx];
+          }
+          if (column.datatype == "multitext") {
+            let offset = rowIndex * column.stringLength;
+            let indicies = column.data.slice(offset, offset + column.stringLength);
+            return indicies.map(idx => idx == 65535 ? "" : column.values[idx]).filter(Boolean).join(", ");
+          }
+          return "";
+        }
+
+        let rowsData = primaryKeys.map((pk, index) => {
+          // TODO - sort unordered data by primary key
+          let row = cols.map(col => getVal(col, index));
+          return row;
+        });
+        return rowsData;
       }
     }
 
@@ -106,16 +155,14 @@
       `;
     }
 
-
-      // ${datasources.map_anns.display ? tableTemplate(datasources.map_anns.columns) : html``}
-    const mainTemplate = (datasources) => html`
-      ${Object.values(datasources.omero_tables).map(t => tableTemplate(t))}
-    `;
-
     // Render the template to the document
     function renderTable() {
-      console.log("rendering Table...", datasources);
-      render(mainTemplate(datasources), document.getElementById("datasources"));
+      console.log("rendering Table...");
+
+      let columns = datasources.getColumns();
+      let rows = datasources.getRowData();
+
+      render(tableTemplate({columns, rows}), document.getElementById("datasources"));
     }
 
     datasources.addEventListener("dataAdded", (e) => {renderTable()})
@@ -134,20 +181,18 @@
       const tableId = event.target.value;
       enableSubmit();
       // if data not loaded...
-      if (!datasources.omero_tables[tableId]) {
-        datasources.addTable(tableId, {columns: [], display: false});
-      }
-      if (checked && !datasources.omero_tables[tableId]?.columns?.length > 0) {
+      // if (!datasources.omero_tables[tableId]) {
+      //   datasources.addTable(tableId, {columns: [], display: false});
+      // }
+      if (checked) {
         // http://localhost:4080/webclient/omero_table/2154/json/?limit=500&offset=0
-        let url = `${WEB_INDEX}omero_table/${tableId}/json/?limit=500&offset=0`;
-        // let url = `${MDV_INDEX}table_info/${tableId}/`
+        // let url = `${WEB_INDEX}omero_table/${tableId}/json/?limit=500&offset=0`;
+        let url = `${MDV_INDEX}table_info/${tableId}/`
         let table_data = fetch(url)
           .then(rsp => rsp.json())
           .then(data => {
             console.log("data", data);
-            let tabledata = data.data;
-            let columns = tabledata.columns.map(c => {return {"name": c}});
-            datasources.addTable(tableId, {columns, rows: tabledata.rows});
+            datasources.addTable(tableId, data);
           })
       }
       datasources.omero_tables[tableId].display = checked;
@@ -171,10 +216,10 @@
       let name = event.target.getAttribute("name");
       // if data not loaded...
       const tableId = `${name}_${OBJ_ID}`
-      if (!datasources.omero_tables[tableId]) {
-        datasources.addTable(tableId, {columns: [], display: false});
-      }
-      if (checked && datasources.map_anns.columns.length == 0) {
+      // if (!datasources.omero_tables[tableId]) {
+      //   datasources.addTable(tableId, {columns: [], display: false});
+      // }
+      if (checked) {
         // name is 'mapanns' or 'datasets'
         // url is /mdv/mapanns_info/project/pid or /mdv/datasets/pid
         let dtype = name == "datasets" ? "" : `${OBJ_TYPE}/`;
@@ -184,15 +229,15 @@
           .then(data => {
             console.log("rsp", data);
             // Need 'columns' [{'name': "Name"}] and 'rows' 2D list
-            let columns = data.keys.map(c => {return {"name": c}});
-            let imgData = data.data;
-            // parseInt just so we can sort
-            let imgIds = Object.keys(imgData).map(k => parseInt(k));
-            imgIds.sort();
-            // each row starts with iid, followed by values (list) for each column.
-            let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid]?.[c.name]?.join(", ") || "")))
-            columns = [{"name": "Image"}].concat(columns);
-            datasources.addTable(tableId, {columns, rows});
+            // let columns = data.keys.map(c => {return {"name": c}});
+            // let imgData = data.data;
+            // // parseInt just so we can sort
+            // let imgIds = Object.keys(imgData).map(k => parseInt(k));
+            // imgIds.sort();
+            // // each row starts with iid, followed by values (list) for each column.
+            // let rows = imgIds.map(iid => [iid].concat(columns.map(c => imgData[iid]?.[c.name]?.join(", ") || "")))
+            // columns = [{"name": "Image"}].concat(columns);
+            datasources.addMapAnns(tableId, data);
           })
       }
       datasources.map_anns.display = checked;
