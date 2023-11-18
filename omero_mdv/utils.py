@@ -478,7 +478,7 @@ def marshal_mdv_column(colname, kvp_by_id, primary_key_ids, bytes_offset):
     byte_count = len(get_column_bytes(kvp_data))
 
     if datatype == "text" and max_value_count > 1:
-        datatype = "multitext"
+        datatype = "multitext"   
     col = {
         "name": colname,
         "datatype": datatype,
@@ -487,6 +487,8 @@ def marshal_mdv_column(colname, kvp_by_id, primary_key_ids, bytes_offset):
     }
     if "text" in datatype:
         col["values"] = vals
+    else:
+        col["minMax"] = [min(kvp_data), max(kvp_data)]
     if max_value_count > 1:
         col["stringLength"] = max_value_count
 

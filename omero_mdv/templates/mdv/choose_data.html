@@ -48,6 +48,9 @@
           Datasets
         </label>
 
+        <!-- This is rendered when we load some tables... -->
+        <div id="chartPicker"></div>
+
         <footer>
           <button disabled type="submit" title="Please choose some data above">
               OK
@@ -75,8 +78,88 @@
     import {html, render} from '{% static "mdv/lit-html_2.8.0/lit-html.js" %}';
 
     
-
     let datasources = new DataModel();
+    datasources.addEventListener("dataAdded", (e) => {renderTable()})
+
+    // Render the template to the document
+    function renderTable() {
+
+      let columns = datasources.getColumns();
+      let rows = datasources.getRowData();
+
+      // Render Table...
+      render(tableTemplate({columns, rows}), document.getElementById("datasources"));
+      // Render Form...
+      render(formTemplate({datasources}), document.getElementById("chartPicker"));
+    }
+
+    const formTemplate = ({datasources}) => {
+
+      const numberCols = datasources.getNumberColumns();
+      const stringCols = datasources.getStringColumns();
+      const allCols = datasources.getColumns();
+
+      return html`
+        <h3>Add charts:</h3>
+        <hr>
+        Add Filters:
+        <ul>
+          <li>
+            <label>
+              <input name="filter" type="checkbox" value="allTextCols"/>
+              All text columns
+            </label>
+          </li>
+          <li>
+            <label>
+              <input name="filter" type="checkbox" value="allNumberCols"/>
+              All number columns
+            </label>
+          </li>
+          ${allCols.map(col => html`
+            <li>
+              <label>
+                <input name="filter" type="checkbox" value="${col.name}"/>
+                ${col.name} (${col.datatype})
+              </label>
+            </li>`)}
+        </ul>
+
+        Add Row Charts:
+        <ul>
+          <li>
+            <label>
+              <input name="rowchart" type="checkbox" value="all"/>
+              All text columns
+            </label>
+          </li>
+          ${stringCols.map(col => html`
+            <li>
+              <label>
+                <input name="rowchart" type="checkbox" value="${col.name}"/>
+                ${col.name}
+              </label>
+            </li>`)}
+        </ul>
+
+        Add Histograms:
+        <ul>
+          <li>
+            <label>
+              <input name="histogram" type="checkbox" value="all"/>
+              All number columns
+            </label>
+          </li>
+          ${numberCols.map(col => html`
+            <li>
+              <label>
+                <input name="histogram" type="checkbox" value="${col.name}"/>
+                ${col.name}
+              </label>
+            </li>`)}
+        </ul>
+      `;
+    }
 
 
     const tableTemplate = ({columns, rows}) => {
@@ -95,18 +178,6 @@
         </tbody></table>
       `;
     }
-
-    // Render the template to the document
-    function renderTable() {
-      console.log("rendering Table...");
-
-      let columns = datasources.getColumns();
-      let rows = datasources.getRowData();
-
-      render(tableTemplate({columns, rows}), document.getElementById("datasources"));
-    }
-
-    datasources.addEventListener("dataAdded", (e) => {renderTable()})
 
 
     function enableSubmit() {

@@ -87,7 +87,6 @@ body {
   }
   button[type="submit"] {
     cursor: pointer;
-    float: right;
     color: #fff;
     background: #0f0c29;  /* fallback for old browsers */
     background: -webkit-linear-gradient(to right, #24243e, #302b63, #0f0c29);  /* Chrome 10-25, Safari 5.1-6 */
@@ -112,9 +111,13 @@ body {
     opacity: 0.7;
     cursor: default;
   }
+  form {
+    margin: 0;
+  }
   form footer {
     margin: 10px -15px 0 -15px;
     padding: 15px;
     padding-bottom: 0;
     border-top: solid #ddd 1px;
+    text-align: right;
   }

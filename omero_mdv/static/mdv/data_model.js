@@ -30,6 +30,14 @@ class DataModel extends EventTarget {
       return cols;
     }
 
+    getNumberColumns() {
+        return this.getColumns().filter(col => col.datatype == "double" || col.datatype == "integer")
+    }
+
+    getStringColumns() {
+        return this.getColumns().filter(col => col.datatype == "text" || col.datatype == "multitext")
+    }
+
     getRowData() {
       const cols = this.getColumns();
       if (cols.length == 0) {

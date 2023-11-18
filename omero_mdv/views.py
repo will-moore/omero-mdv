@@ -137,6 +137,10 @@ def submit_form(request, conn=None, **kwargs):
 
     file_ids = request.POST.getlist("file")
     mdv_name = request.POST.get("mdv_name")
+    # charts
+    filters = request.POST.getlist("filter")
+    rowcharts = request.POST.getlist("rowchart")
+    histograms = request.POST.getlist("histogram")
 
     # Load data to compile our MDV config file
     file_ids = [int(fid) for fid in file_ids]
@@ -218,6 +222,45 @@ def submit_form(request, conn=None, **kwargs):
         # E.g. project-1 - not used yet but might be useful to know
         datasrcs["parent_id"] = kvp_parent
 
+    # Create initialView
+    charts = get_default_charts(datasrcs)
+
+    def get_column(name):
+        return next(c for c in columns if c["name"] == name)
+
+    # Filters
+    if len(filters) > 0:
+        fdata = {
+            "title": "Filter Selection",
+            "type": "selection_dialog",
+            "param": filters,
+            "id": "TODO:random_filter_id",
+            "filters": {},
+        }
+        for col_name in filters:
+            col = get_column(col_name)
+            filter_params = {}
+            if col["datatype"] == "text":
+                # start by NOT filtering anything
+                filter_params["exclude"] = False
+                filter_params["category"] = "__none__"
+            elif col["datatype"] == "multitext":
+                filter_params["operand"] = "or"
+                filter_params["category"] = []
+            else:
+                # number filter - need min/max
+                filter_params = col["minMax"]
+            fdata["filters"][col_name] = filter_params
+        charts.append(fdata)
+
+    # single view "main" - we don't know THIS_DATASOURCE_ID yet...
+    datasrcs["views"] = {"main": {
+        "initialCharts": {
+            "THIS_DATASOURCE_ID": charts,
+        },
+        "dataSources": {"THIS_DATASOURCE_ID": {"layout": "gridstack"}}
+    }}
+
     config_json = json.dumps(datasrcs, indent=2)
     if group_id is None:
         return JsonResponse({"Error": "No data chosen"})
@@ -279,7 +322,8 @@ def save_view(request, conn=None, **kwargs):
 
     # We want to find the "view"
     current_view = json_data["args"]["state"]["currentView"]
-    charts = json_data["args"]["state"]["view"]["initialCharts"]
+    view_json = json_data["args"]["state"]["view"]
+    charts = view_json["initialCharts"]
     # need to use "mdv_config_ID" to find the config FileAnnotation
     for config_id, data in charts.items():
         ann_id = get_ann_id(config_id)
@@ -289,7 +333,7 @@ def save_view(request, conn=None, **kwargs):
         if "views" not in config_json:
             config_json["views"] = {}
 
-        config_json["views"][current_view] = charts
+        config_json["views"][current_view] = view_json
 
         config_txt = json.dumps(config_json, indent=2).encode('utf8')
         update_file_ann(conn, ann_id, config_txt)
@@ -338,7 +382,7 @@ def _table_cols_byte_offsets(configid, conn, clear_cache=False):
 
     # go through config to get bytes offsets for all columns
     # We combine the columns for each table in the config...
-    for col in get_columns(config_json):
+    for col in config_json["columns"]:
         column_name = col["name"]
         bytes_length = col["bytes"][1] - col["bytes"][0]
         col_byte_offsets[column_name] = [offset, offset + bytes_length - 1]
@@ -408,13 +452,13 @@ def table_bytes(request, configid, conn=None, **kwargs):
     return rsp
 
 
-def get_columns(mdv_config):
+# def get_columns(mdv_config):
     # We combine the columns for each table in the config...
     # Making sure we avoid duplicate names/fields
-    columns = []
-    column_names = []
+    # columns = []
+    # column_names = []
 
-    for col in mdv_config["columns"]:
+    # for col in mdv_config["columns"]:
         # colname = col["name"]
         # increment = 1
         # # avoid duplicate names - TODO: move this to submit()
@@ -428,11 +472,11 @@ def get_columns(mdv_config):
         # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
         # This requires the MDV project including data to be fully saved into JSON config
         # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
-        if "data" in col:
-            del (col["data"])
-        columns.append(col)
+        # if "data" in col:
+        #     del (col["data"])
+        # columns.append(col)
 
-    return columns
+    # return columns
 
 
 @login_required()
@@ -444,11 +488,42 @@ def views(request, configid, conn=None, **kwargs):
     # If views exist, simply return them...
     if "views" in config_json:
         rsp = {}
-        for view_id, charts in config_json["views"].items():
-            # main, etc
-            rsp[view_id] = {"initialCharts": charts}
+        for view_id, view_config in config_json["views"].items():
+            # main, etc - charts is {datasource_id: []}
+            initCharts = {}
+            charts = view_config["initialCharts"]
+            for datasourceId, ds_charts in charts.items():
+                # If we saved this view before knowing the file ID we saved it to...
+                if datasourceId == "THIS_DATASOURCE_ID":
+                    datasourceId = charts_id(configid)
+                initCharts[datasourceId] = ds_charts
+            view_config["initialCharts"] = initCharts
+
+            if "dataSources" in view_config:
+                ds = {}
+                for datasourceId, ds_info in view_config["dataSources"].items():
+                    # If we saved this view before knowing the file ID we saved it to...
+                    if datasourceId == "THIS_DATASOURCE_ID":
+                        datasourceId = charts_id(configid)
+                    ds[datasourceId] = ds_info
+                view_config["dataSources"] = ds
+            rsp[view_id] = view_config
         return JsonResponse(rsp)
 
+    # create a default view...
+    view_charts = get_default_charts(config_json)
+    vw = {
+        "main": {
+            "initialCharts": {
+                charts_id(configid): view_charts
+            },
+            "dataSources":{charts_id(configid):{"layout":"gridstack"}}
+        }
+    }
+    return JsonResponse(vw)
+
+
+def get_default_charts(config_json):
     # ...otherwise generate an initial view from scratch...
     grid_x = 0
     grid_y = 0
@@ -458,7 +533,8 @@ def views(request, configid, conn=None, **kwargs):
     views = []
     column_names = []
 
-    columns = get_columns(config_json)
+    columns = config_json["columns"]
+    # Don't add webclient-link column into Table
     column_names = [col["name"] for col in columns if col["name"] != WEBCLIENT_LINK]
     image_col = None
     for idx, col in enumerate(columns):
@@ -475,7 +551,7 @@ def views(request, configid, conn=None, **kwargs):
         "legend": "Some table data",
         "type": "table_chart",
         "param": column_names,
-        "id": "table_chart_%s" % configid,
+        "id": "table_chart_uuid? FIXME?",
         "column_widths": col_widths,
         "gsposition": [
             grid_x,
@@ -557,15 +633,7 @@ def views(request, configid, conn=None, **kwargs):
         })
         grid_x = grid_x + chart_size_x
 
-    vw = {
-        "main": {
-            "initialCharts": {
-                charts_id(configid): views
-            },
-            "dataSources":{charts_id(configid):{"layout":"gridstack"}}
-        }
-    }
-    return JsonResponse(vw)
+    return views
 
 
 def _config_json(conn, fileid):
@@ -590,7 +658,13 @@ def datasources(request, configid, conn=None, **kwargs):
 
     # Load
     config_json = _config_json(conn, configid)
-    columns = get_columns(config_json)
+    columns = config_json["columns"]
+    # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
+    # This requires the MDV project including data to be fully saved into JSON config
+    # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
+    for col in columns:
+        if "data" in col:
+            del (col["data"])
 
     # Single datasource since we join everything into one table
     ds = [
