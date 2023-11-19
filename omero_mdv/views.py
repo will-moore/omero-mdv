@@ -223,7 +223,7 @@ def submit_form(request, conn=None, **kwargs):
         datasrcs["parent_id"] = kvp_parent
 
     # Create initialView
-    charts = get_default_charts(datasrcs)
+    charts = []
 
     def get_column(name):
         return next(c for c in columns if c["name"] == name)
@@ -252,6 +252,8 @@ def submit_form(request, conn=None, **kwargs):
                 filter_params = col["minMax"]
             fdata["filters"][col_name] = filter_params
         charts.append(fdata)
+
+    charts = add_default_charts(datasrcs, charts)
 
     # single view "main" - we don't know THIS_DATASOURCE_ID yet...
     datasrcs["views"] = {"main": {
@@ -511,7 +513,7 @@ def views(request, configid, conn=None, **kwargs):
         return JsonResponse(rsp)
 
     # create a default view...
-    view_charts = get_default_charts(config_json)
+    view_charts = add_default_charts(config_json)
     vw = {
         "main": {
             "initialCharts": {
@@ -523,16 +525,10 @@ def views(request, configid, conn=None, **kwargs):
     return JsonResponse(vw)
 
 
-def get_default_charts(config_json):
-    # ...otherwise generate an initial view from scratch...
-    grid_x = 0
-    grid_y = 0
-    chart_size_x = 4
-    chart_size_y = 4
-
-    views = []
+def add_default_charts(config_json, charts=[], add_table=True,
+                       add_thumbs=True, add_summary=True):
+    
     column_names = []
-
     columns = config_json["columns"]
     # Don't add webclient-link column into Table
     column_names = [col["name"] for col in columns if col["name"] != WEBCLIENT_LINK]
@@ -542,23 +538,70 @@ def get_default_charts(config_json):
             image_col = col
             image_col_index = idx
 
-    # lets add a table...
-    col_widths = {}
+    # first, layout existing charts...
+    grid_x = 0
+    grid_y = 0
+
+    chart_count = len(charts)
+
+    # With the grid layout, we have 12 columns
+    TOTAL_COLS = 12
+    # do we save the right column for image panels?
+    right_col_images = image_col is not None and (add_thumbs or add_summary)
+
+    # most layouts divide the 12 grid into 4 (3 spaces per chart)
+    chart_size_x = 3
+    chart_size_y = 3
+    available_cols = TOTAL_COLS
+
+    # some layouts use bigger charts
+    if right_col_images:
+        available_cols = 9
+        if chart_count < 3 or chart_count == 4:
+            chart_size_x = 4
+            available_cols = 8
+    else:
+        if chart_count < 4:
+            chart_size_x = 4
+
+
+    # layout the existing charts into rows/columns
+    for chart in charts:
+        chart["gsposition"] = [grid_x, grid_y]
+        chart["gssize"] = [chart_size_x, chart_size_y]
+        grid_x += chart_size_x
+        # if no room for next chart, start new row...
+        if grid_x + chart_size_x >= available_cols:
+            grid_x = 0
+            grid_y += chart_size_y
+
+    # Always add a table below the charts, on a new row
+    # using all available columns
+    # if part-way through a row, start a new one...
+    table_chart_size_x = available_cols
+    if grid_x != 0:
+        grid_x = 0
+        grid_y += chart_size_y
+    # if we had no charts, squeeze table into top-left
+    if chart_count == 0:
+        table_chart_size_x = chart_size_x
+
+    table_col_widths = {}
     for name in column_names:
-        col_widths[name] = len(name) * 10
-    views.append({
+        table_col_widths[name] = len(name) * 10
+    charts.append({
         "title": "Table",
         "legend": "Some table data",
         "type": "table_chart",
         "param": column_names,
         "id": "table_chart_uuid? FIXME?",
-        "column_widths": col_widths,
+        "column_widths": table_col_widths,
         "gsposition": [
             grid_x,
             grid_y
         ],
         "gssize": [
-            chart_size_x,
+            table_chart_size_x,
             chart_size_y
         ]
     })
@@ -566,7 +609,7 @@ def get_default_charts(config_json):
 
     # If we have multiple number columns, add Scatter Plot...
     # if len(number_cols) > 1:
-    #     views.append({
+    #     charts.append({
     #         "type":"wgl_scatter_plot",
     #         "title":"Scatter Plot",
     #         "param":[
@@ -584,8 +627,14 @@ def get_default_charts(config_json):
     #     })
     #     pos_x = pos_x + chart_width + gap
 
-    if image_col:
-        views.append({
+    # thumbs and summary go in right column...
+    grid_x = TOTAL_COLS - chart_size_x
+    grid_y = 0
+    
+    if right_col_images and add_thumbs:
+        if chart_count < 2:
+            grid_x = chart_size_x
+        charts.append({
             # Thumbnails to show filtered images
             "title": "Thumbnails",
             "legend": "",
@@ -606,11 +655,15 @@ def get_default_charts(config_json):
                 chart_size_y
             ]
         })
-        grid_x = grid_x + chart_size_x
+        if chart_count < 2:
+            # side by side
+            grid_x += chart_size_x
+        else:
+            grid_y += chart_size_y
 
     # Show a summary - selected Image (if we have Images)
-    if image_col:
-        views.append({
+    if right_col_images and add_summary:
+        charts.append({
             "title": "Summary",
             "legend": "",
             "type": "row_summary_box",
@@ -633,7 +686,7 @@ def get_default_charts(config_json):
         })
         grid_x = grid_x + chart_size_x
 
-    return views
+    return charts
 
 
 def _config_json(conn, fileid):
