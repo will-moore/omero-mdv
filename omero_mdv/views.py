@@ -253,6 +253,28 @@ def submit_form(request, conn=None, **kwargs):
             fdata["filters"][col_name] = filter_params
         charts.append(fdata)
 
+    # Rowchart(s)
+    for rowchart_name in rowcharts:
+        col = get_column(rowchart_name)
+        rcdata = {
+          "title": rowchart_name,
+          "legend": "",
+          "type": "row_chart",
+          "param": rowchart_name,
+          "id": "vIQ7Pg:TODO",
+          "axis": {
+            "x": {
+              "textSize": 14,
+              "label": "",
+              "size": 30,
+              "tickfont": 14
+            }
+          },
+            #   "show_limit": len(col["values"]),  # show ALL values
+          "sort": "size",
+        }
+        charts.append(rcdata)
+
     charts = add_default_charts(datasrcs, charts)
 
     # single view "main" - we don't know THIS_DATASOURCE_ID yet...
@@ -557,7 +579,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
     # some layouts use bigger charts
     if right_col_images:
         available_cols = 9
-        if chart_count < 3 or chart_count == 4:
+        if chart_count < 3:
             chart_size_x = 4
             available_cols = 8
     else:
@@ -571,19 +593,16 @@ def add_default_charts(config_json, charts=[], add_table=True,
         chart["gssize"] = [chart_size_x, chart_size_y]
         grid_x += chart_size_x
         # if no room for next chart, start new row...
-        if grid_x + chart_size_x >= available_cols:
+        if grid_x + chart_size_x > available_cols:
             grid_x = 0
             grid_y += chart_size_y
 
     # Always add a table below the charts, on a new row
     # using all available columns
     # if part-way through a row, start a new one...
-    table_chart_size_x = available_cols
-    if grid_x != 0:
-        grid_x = 0
-        grid_y += chart_size_y
+    table_chart_size_x = available_cols - grid_x
     # if we had no charts, squeeze table into top-left
-    if chart_count == 0:
+    if chart_count == 0 and right_col_images:
         table_chart_size_x = chart_size_x
 
     table_col_widths = {}
@@ -607,35 +626,18 @@ def add_default_charts(config_json, charts=[], add_table=True,
     })
     grid_x = grid_x + chart_size_x
 
-    # If we have multiple number columns, add Scatter Plot...
-    # if len(number_cols) > 1:
-    #     charts.append({
-    #         "type":"wgl_scatter_plot",
-    #         "title":"Scatter Plot",
-    #         "param":[
-    #             number_cols[0].name,
-    #             number_cols[1].name
-    #         ],
-    #         "size": [
-    #             chart_width,
-    #             chart_height
-    #         ],
-    #         "position": [
-    #             pos_x,
-    #             pos_y
-    #         ]
-    #     })
-    #     pos_x = pos_x + chart_width + gap
-
     # thumbs and summary go in right column...
     grid_x = TOTAL_COLS - chart_size_x
     grid_y = 0
     
+    # Thumbnails to show filtered images
     if right_col_images and add_thumbs:
         if chart_count < 2:
+            # put thumbs in 2nd column
             grid_x = chart_size_x
+        else:
+            thumbs_chart_size_y = 2
         charts.append({
-            # Thumbnails to show filtered images
             "title": "Thumbnails",
             "legend": "",
             "type": "image_table_chart",
@@ -652,14 +654,14 @@ def add_default_charts(config_json, charts=[], add_table=True,
             ],
             "gssize": [
                 chart_size_x,
-                chart_size_y
+                thumbs_chart_size_y
             ]
         })
         if chart_count < 2:
             # side by side
             grid_x += chart_size_x
         else:
-            grid_y += chart_size_y
+            grid_y += thumbs_chart_size_y
 
     # Show a summary - selected Image (if we have Images)
     if right_col_images and add_summary:

@@ -252,6 +252,8 @@ def table_to_mdv_columns(conn, tableid):
                 # ...These are the unique values
                 col_data["values"] = values
                 data = indices
+            else:
+                col_data["minMax"] = [min(data), max(data)]
 
             col_bytes = get_column_bytes(data)
             col_data["data"] = data
@@ -330,7 +332,6 @@ def mapanns_to_mdv_columns(conn, projectid, primary_keys=None, bytes_offset=0):
     """
     result = qs.projection(q, params, conn.SERVICE_OPTS)
     iids = [r[0].val for r in result]
-    print("iids", iids)
 
     params = omero.sys.ParametersI()
     params.addIds(iids)

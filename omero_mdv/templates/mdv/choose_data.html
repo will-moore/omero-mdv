@@ -98,6 +98,7 @@
       const numberCols = datasources.getNumberColumns();
       const stringCols = datasources.getStringColumns();
       const allCols = datasources.getColumns();
+      const fm = new Intl.NumberFormat("en-IN", { maximumSignificantDigits: 3 });
 
       return html`
         <h3>Add charts:</h3>
@@ -116,7 +117,14 @@
               All number columns
             </label>
           </li>
-          ${allCols.map(col => html`
+          ${numberCols.map(col => col.minMax && html`
+            <li>
+              <label>
+                <input name="filter" type="checkbox" value="${col.name}"/>
+                ${col.name} (${col.datatype} ${col.minMax.map(fm.format).join("-")})
+              </label>
+            </li>`)}
+          ${stringCols.map(col => html`
             <li>
               <label>
                 <input name="filter" type="checkbox" value="${col.name}"/>
