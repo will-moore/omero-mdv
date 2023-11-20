@@ -95,7 +95,8 @@ def list_file_anns(conn, namespace):
             join obj.details.owner as o
             join obj.details.creationEvent as e
             join obj.file.details as p
-            join obj.file as f where obj.ns=:ns"""
+            join obj.file as f where obj.ns=:ns
+            order by obj.id"""
 
     qs = conn.getQueryService()
     file_anns = qs.projection(q, params, conn.SERVICE_OPTS)
