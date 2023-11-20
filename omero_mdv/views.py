@@ -275,6 +275,36 @@ def submit_form(request, conn=None, **kwargs):
         }
         charts.append(rcdata)
 
+    # Histogram (bar chart)
+    for histogram_name in histograms:
+        col = get_column(histogram_name)
+        hdata = {
+          "title": histogram_name,
+          "legend": "",
+          "type": "bar_chart",
+          "param": histogram_name,
+          "x": {
+            "size": 30,
+            "label": "my_double",
+            "textsize": 13,
+            "textSize": 13,
+            "tickfont": 10
+            },
+          "y": {
+            "size": 45,
+            "label": "frequency",
+            "textsize": 13,
+            "textSize": 13,
+            "tickfont": 10
+          },
+          "id": "dmJSCl",
+          "display_max": col["minMax"][1],
+          "display_min": col["minMax"][0],
+          # "bin_number": 10,
+        }
+        charts.append(hdata)
+
+
     charts = add_default_charts(datasrcs, charts)
 
     # single view "main" - we don't know THIS_DATASOURCE_ID yet...
@@ -632,6 +662,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
     
     # Thumbnails to show filtered images
     if right_col_images and add_thumbs:
+        thumbs_chart_size_y = chart_size_y
         if chart_count < 2:
             # put thumbs in 2nd column
             grid_x = chart_size_x
