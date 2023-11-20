@@ -8,12 +8,15 @@
     </nav>
     <main>
       {% block main %}
-      <article>
       <form id="choose_data_form" class="choose_data" method="post" action="{% url 'mdv_submit_form' %}">
-        <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
+      <article>
+        <header>
+          <h2>Choose data for {{obj.type}}-{{obj.id}}:</h2>
+        </header>
         {% csrf_token %}
+        <div>
         <label
-          >MDV Project name: <input name="mdv_name" value="{{obj.name}}"
+          >MDV Project name: <input name="mdv_name" type="text" value="{{obj.name}}"
         /></label>
         <h3>OMERO.tables:</h3>
         <ul>
@@ -50,14 +53,14 @@
 
         <!-- This is rendered when we load some tables... -->
         <div id="chartPicker"></div>
-
+        </div>
         <footer>
           <button disabled type="submit" title="Please choose some data above">
               OK
             </button>
         </footer>
-      </form>
       </article>
+    </form>
       <div id="datasources">
         <!-- lit-html adds <table> here -->
       </div>
@@ -101,22 +104,10 @@
       const fm = new Intl.NumberFormat("en-IN", { maximumSignificantDigits: 3 });
 
       return html`
-        <h3>Add charts:</h3>
         <hr>
-        Add Filters:
+        <h3>Add Filters:</h3>
         <ul>
           <li>
-            <label>
-              <input name="filter" type="checkbox" value="allTextCols"/>
-              All text columns
-            </label>
-          </li>
-          <li>
-            <label>
-              <input name="filter" type="checkbox" value="allNumberCols"/>
-              All number columns
-            </label>
-          </li>
           ${numberCols.map(col => col.minMax && html`
             <li>
               <label>
@@ -133,14 +124,8 @@
             </li>`)}
         </ul>
 
-        Add Row Charts:
+        <h3>Add Row Charts:</h3>
         <ul>
-          <li>
-            <label>
-              <input name="rowchart" type="checkbox" value="all"/>
-              All text columns
-            </label>
-          </li>
           ${stringCols.map(col => html`
             <li>
               <label>
@@ -150,14 +135,8 @@
             </li>`)}
         </ul>
 
-        Add Histograms:
+        <h3>Add Histograms:</h3>
         <ul>
-          <li>
-            <label>
-              <input name="histogram" type="checkbox" value="all"/>
-              All number columns
-            </label>
-          </li>
           ${numberCols.map(col => html`
             <li>
               <label>
