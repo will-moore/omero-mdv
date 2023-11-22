@@ -714,7 +714,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
             ],
             "gssize": [
                 chart_size_x,
-                chart_size_y
+                chart_size_y + 1,
             ]
         })
         grid_x = grid_x + chart_size_x

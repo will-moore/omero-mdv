@@ -44,7 +44,7 @@ body {
     box-sizing: border-box;
   }
   input[type='text'] {
-    width: 350px;
+    width: 320px;
     font-size: 1.0em;
     padding: 3px;
     border-radius: 5px;
