@@ -14,7 +14,7 @@ urlpatterns = [
     # page above loads table info via...
     re_path(r'^table_info/(?P<tableid>[0-9]+)/$', views.table_info, name='mdv_table_info'),
     # load map-annotations as if a table...
-    re_path(r'^mapanns_info/(?P<projectid>[0-9]+)/$', views.mapanns_info, name='mdv_mapanns_info'),
+    re_path(r'^mapanns_info/(?P<objtype>[a-z]+)/(?P<objid>[0-9]+)/$', views.mapanns_info, name='mdv_mapanns_info'),
     re_path(r'^datasets_info/(?P<projectid>[0-9]+)/$', views.datasets_info, name='mdv_datasets_info'),
 
     # MDV viewer

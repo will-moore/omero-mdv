@@ -3,6 +3,7 @@ from io import BytesIO
 from collections import defaultdict
 from datetime import datetime
 import time
+from random import choices
 
 from django.http import Http404
 import numpy as np
@@ -15,6 +16,13 @@ MDV_ANN_NAMESPACE = "omero-mdv_project.json"
 
 # if we have a number column with no value, what do we use?
 MISSING_NUMBER = 0
+
+
+def get_random_id(length=6):
+    # chars include A-Z a-z
+    letters = [chr(i) for i in range(65, 91)] + [chr(i) for i in range(97, 123)]
+    return "".join(choices(letters, k=length))
+
 
 def get_mdv_ann(conn, file_id):
     """Get the MDV table_offsets Annotation linked to File Annotation"""
@@ -95,7 +103,8 @@ def list_file_anns(conn, namespace):
             join obj.details.owner as o
             join obj.details.creationEvent as e
             join obj.file.details as p
-            join obj.file as f where obj.ns=:ns"""
+            join obj.file as f where obj.ns=:ns
+            order by obj.id"""
 
     qs = conn.getQueryService()
     file_anns = qs.projection(q, params, conn.SERVICE_OPTS)
@@ -245,14 +254,18 @@ def table_to_mdv_columns(conn, tableid):
                 # "is_url": True,
             }
 
-            values = get_column_values(t, column_index)
+            data = get_column_values(t, column_index)
             if col_data["datatype"] == "text":
                 # we want to get all the values...
-                indices, vals = get_text_indices(values)
+                indices, values = get_text_indices(data)
                 # ...These are the unique values
-                col_data["values"] = vals
+                col_data["values"] = values
+                data = indices
+            else:
+                col_data["minMax"] = [min(data), max(data)]
 
-            col_bytes = get_column_bytes(values)
+            col_bytes = get_column_bytes(data)
+            col_data["data"] = data
             bytes_length = len(col_bytes)
             col_data['bytes'] = [offset, offset + bytes_length]
             offset = offset + bytes_length
@@ -264,9 +277,7 @@ def table_to_mdv_columns(conn, tableid):
     return {'columns': cols_data, 'row_count': row_count}
 
 
-def datasets_by_id(conn, projectid):
-    # load data in {'iid': {'Dataset Name': ['name', 'name2]}}
-    # Same format as mapanns_by_id
+def datasets_to_mdv_columns(conn, projectid, primary_keys=None, bytes_offset=0):
 
     params = omero.sys.ParametersI()
     params.addId(projectid)
@@ -279,17 +290,43 @@ def datasets_by_id(conn, projectid):
         join pl.parent as project where project.id=:id
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = defaultdict(lambda: defaultdict(list))
+    kvp_by_id = defaultdict(lambda: defaultdict(list))
     for img in results:
         img_id = img.id.val
         for dsl in img.copyDatasetLinks():
             # List handles case of Image in 2 Datasets
-            rsp[img_id]["Dataset_Name"].append(dsl.parent.name.val)
-    return {"data": rsp, "keys": ["Dataset_Name"]}
+            kvp_by_id[img_id]["Dataset_Name"].append(dsl.parent.name.val)
+    # return {"data": rsp, "keys": ["Dataset_Name"]}
+
+    columns = []
+    # TODO: If we DO have primary keys,
+    if primary_keys is None:
+        iids = list(kvp_by_id.keys())
+        iids.sort()
+        primary_keys = iids
+        # Create an "Image" column
+        img_bytes = get_column_bytes(iids)
+        byte_count = len(img_bytes)
+        columns.append({
+            "name": "Image",
+            "field": "Image",
+            "datatype": "integer",
+            "bytes": [bytes_offset, bytes_offset + byte_count],
+            "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
+        })
+        bytes_offset += byte_count
+
+    col = marshal_mdv_column("Dataset_Name", kvp_by_id, primary_keys, bytes_offset)
+    columns.append(col)
+    bytes_offset = col["bytes"][1]
+
+    return columns
 
 
-def mapanns_by_id(conn, projectid):
-    # load data in {'iid': {'key': ['value', 'value2']}}
+def mapanns_to_mdv_columns(conn, projectid, primary_keys=None, bytes_offset=0):
+    """
+    returns list of columns JSON in mdv format
+    """
 
     params = omero.sys.ParametersI()
     params.addId(projectid)
@@ -304,7 +341,6 @@ def mapanns_by_id(conn, projectid):
     """
     result = qs.projection(q, params, conn.SERVICE_OPTS)
     iids = [r[0].val for r in result]
-    print("iids", iids)
 
     params = omero.sys.ParametersI()
     params.addIds(iids)
@@ -316,23 +352,46 @@ def mapanns_by_id(conn, projectid):
         and image.id in (:ids)
     """
     results = qs.findAllByQuery(q, params, conn.SERVICE_OPTS)
-    rsp = defaultdict(lambda: defaultdict(list))
-    keys = set()
+    kvp_by_id = defaultdict(lambda: defaultdict(list))
+    kvp_keys = set()
     for img_ann_link in results:
         img_id = img_ann_link.parent.id.val
         ann = img_ann_link.child
         for kv in ann.getMapValue():
-            keys.add(kv.name)
-            rsp[img_id][kv.name].append(kv.value)
-    keys = list(keys)
-    keys.sort()
+            kvp_keys.add(kv.name)
+            kvp_by_id[img_id][kv.name].append(kv.value)
+    kvp_keys = list(kvp_keys)
+    kvp_keys.sort()
 
     # make sure we include images without KVPs
     for iid in iids:
-        if iid not in rsp:
-            rsp[iid] = {}
+        if iid not in kvp_by_id:
+            kvp_by_id[iid] = {}
 
-    return {"data": rsp, "keys": keys}
+    columns = []
+    # TODO: If we DO have primary keys,
+    if primary_keys is None:
+        iids = list(kvp_by_id.keys())
+        iids.sort()
+        primary_keys = iids
+        # Create an "Image" column
+        img_bytes = get_column_bytes(iids)
+        byte_count = len(img_bytes)
+        columns.append({
+            "name": "Image",
+            "field": "Image",
+            "datatype": "integer",
+            "bytes": [bytes_offset, bytes_offset + byte_count],
+            "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
+        })
+        bytes_offset += byte_count
+
+    for colname in kvp_keys:
+        col = marshal_mdv_column(colname, kvp_by_id, primary_keys, bytes_offset)
+        columns.append(col)
+        bytes_offset = col["bytes"][1]
+
+    return columns
 
 
 def get_text_indices(values):
@@ -429,7 +488,7 @@ def marshal_mdv_column(colname, kvp_by_id, primary_key_ids, bytes_offset):
     byte_count = len(get_column_bytes(kvp_data))
 
     if datatype == "text" and max_value_count > 1:
-        datatype = "multitext"
+        datatype = "multitext"   
     col = {
         "name": colname,
         "datatype": datatype,
@@ -438,6 +497,8 @@ def marshal_mdv_column(colname, kvp_by_id, primary_key_ids, bytes_offset):
     }
     if "text" in datatype:
         col["values"] = vals
+    else:
+        col["minMax"] = [min(kvp_data), max(kvp_data)]
     if max_value_count > 1:
         col["stringLength"] = max_value_count
 

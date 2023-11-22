@@ -27,7 +27,10 @@
 </style>
 
   <article>
-    <h2>Open MDV project:</h2>
+    <header>
+      <h2>Open MDV project:</h2>
+    </header>
+    <div>
     <ul>
       {% for config in configs %}
       <li title="FileAnnotation ID: {{ config.id }}, File ID: {{ config.file.id }}">
@@ -44,5 +47,6 @@
       </li>
       {% endfor %}
     </ul>
+  </div>
   </article>
 {% endblock %}

@@ -18,8 +18,8 @@ from omeroweb.webgateway.views import render_thumbnail, render_image
 from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
-    get_text_indices, get_column_bytes, datasets_by_id, mapanns_by_id, update_file_ann, \
-    save_text_to_file_annotation, get_column_values, marshal_mdv_column
+    get_text_indices, get_column_bytes, datasets_to_mdv_columns, mapanns_to_mdv_columns, update_file_ann, \
+    save_text_to_file_annotation, get_column_values, get_random_id
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -81,16 +81,18 @@ def choose_data(request, conn=None, **kwargs):
 @login_required()
 def datasets_info(request, projectid, conn=None, **kwargs):
     # load data in {'iid': {'Dataset': 'name'}}
-    return JsonResponse(datasets_by_id(conn, projectid))
+    return JsonResponse({"columns": datasets_to_mdv_columns(conn, projectid)})
 
 
 @login_required()
-def mapanns_info(request, projectid, conn=None, **kwargs):
+def mapanns_info(request, objtype, objid, conn=None, **kwargs):
     # for the 'choose_data' page, we don't load MDV formatted info...
     # return JsonResponse(_mapann_info(conn, projectid))
 
+    if objtype != "project":
+        raise Http404("Only 'project' supported just now")
     # ...instead load data in {'iid': {'key': 'values'}}
-    return JsonResponse(mapanns_by_id(conn, projectid))
+    return JsonResponse({"columns": mapanns_to_mdv_columns(conn, objid)})
 
 
 @login_required()
@@ -135,6 +137,10 @@ def submit_form(request, conn=None, **kwargs):
 
     file_ids = request.POST.getlist("file")
     mdv_name = request.POST.get("mdv_name")
+    # charts
+    filters = request.POST.getlist("filter")
+    rowcharts = request.POST.getlist("rowchart")
+    histograms = request.POST.getlist("histogram")
 
     # Load data to compile our MDV config file
     file_ids = [int(fid) for fid in file_ids]
@@ -168,6 +174,9 @@ def submit_form(request, conn=None, **kwargs):
         for idx, col in enumerate(tdata["columns"]):
             col["omero_table_file_id"] = table_id
             col["omero_table_column"] = idx
+            # don't want to store OMERO.tables data in json
+            if "data" in col:
+                del(col["data"])
 
         columns.extend(tdata["columns"])
         # update bytes, needed for KVP etc below...
@@ -186,33 +195,20 @@ def submit_form(request, conn=None, **kwargs):
                         "Project", obj_id).getDetails().group.id.val
                 # Map-Anns and Datasets loaded in the same format...
                 if form_input == "mapanns":
-                    rsp = mapanns_by_id(conn, obj_id)
+                    # if image_ids are None (no OMERO.table above), first column will be 'Image'
+                    image_ids = primary_keys.get("Image")
+                    cols = mapanns_to_mdv_columns(conn, obj_id, primary_keys=image_ids, bytes_offset=bytes_offset)
+                    columns.extend(cols)
+                    if image_ids is None:
+                        primary_keys["Image"] = cols[0]["data"]
+                    bytes_offset = cols[-1]["bytes"][1]
                 else:
-                    rsp = datasets_by_id(conn, obj_id)
-                kvp_by_id = rsp["data"]
-                kvp_keys = rsp["keys"]
-
-                # TODO: If we DO have primary keys,
-                if "Image" not in primary_keys:
-                    iids = list(kvp_by_id.keys())
-                    iids.sort()
-                    primary_keys["Image"] = iids
-                    # Create an "Image" column
-                    img_bytes = get_column_bytes(iids)
-                    byte_count = len(img_bytes)
-                    columns.append({
-                        "name": "Image",
-                        "field": "Image",
-                        "datatype": "integer",
-                        "bytes": [bytes_offset, bytes_offset + byte_count],
-                        "data": iids    # TODO: this is duplicate of 'primary_keys' - maybe don't need them now?
-                    })
-                    bytes_offset += byte_count
-
-                for colname in kvp_keys:
-                    col = marshal_mdv_column(colname, kvp_by_id, primary_keys["Image"], bytes_offset)
-                    columns.append(col)
-                    bytes_offset = col["bytes"][1]
+                    image_ids = primary_keys.get("Image")
+                    cols = datasets_to_mdv_columns(conn, obj_id, primary_keys=image_ids, bytes_offset=bytes_offset)
+                    columns.extend(cols)
+                    if image_ids is None:
+                        primary_keys["Image"] = cols[0]["data"]
+                    bytes_offset = cols[-1]["bytes"][1]
 
     columns.append(get_webclient_links_column(primary_keys["Image"], bytes_offset))
 
@@ -225,6 +221,99 @@ def submit_form(request, conn=None, **kwargs):
     if kvp_parent is not None:
         # E.g. project-1 - not used yet but might be useful to know
         datasrcs["parent_id"] = kvp_parent
+
+    # Create initialView
+    charts = []
+
+    def get_column(name):
+        return next(c for c in columns if c["name"] == name)
+
+    # Filters
+    if len(filters) > 0:
+        fdata = {
+            "title": "Filter Selection",
+            "type": "selection_dialog",
+            "param": filters,
+            "id": get_random_id(),
+            "filters": {},
+        }
+        for col_name in filters:
+            col = get_column(col_name)
+            filter_params = {}
+            if col["datatype"] == "text":
+                # start by NOT filtering anything
+                filter_params["exclude"] = False
+                filter_params["category"] = "__none__"
+            elif col["datatype"] == "multitext":
+                filter_params["operand"] = "or"
+                filter_params["category"] = []
+            else:
+                # number filter - need min/max
+                filter_params = col["minMax"]
+            fdata["filters"][col_name] = filter_params
+        charts.append(fdata)
+
+    # Rowchart(s)
+    for rowchart_name in rowcharts:
+        col = get_column(rowchart_name)
+        rcdata = {
+          "title": rowchart_name,
+          "legend": "",
+          "type": "row_chart",
+          "param": rowchart_name,
+          "id": get_random_id(),
+          "axis": {
+            "x": {
+              "textSize": 14,
+              "label": "",
+              "size": 30,
+              "tickfont": 14
+            }
+          },
+            #   "show_limit": len(col["values"]),  # show ALL values
+          "sort": "size",
+        }
+        charts.append(rcdata)
+
+    # Histogram (bar chart)
+    for histogram_name in histograms:
+        col = get_column(histogram_name)
+        hdata = {
+          "title": histogram_name,
+          "legend": "",
+          "type": "bar_chart",
+          "param": histogram_name,
+          "x": {
+            "size": 30,
+            "label": "my_double",
+            "textsize": 13,
+            "textSize": 13,
+            "tickfont": 10
+            },
+          "y": {
+            "size": 45,
+            "label": "frequency",
+            "textsize": 13,
+            "textSize": 13,
+            "tickfont": 10
+          },
+          "id": get_random_id(),
+          "display_max": col["minMax"][1],
+          "display_min": col["minMax"][0],
+          # "bin_number": 10,
+        }
+        charts.append(hdata)
+
+
+    charts = add_default_charts(datasrcs, charts)
+
+    # single view "main" - we don't know THIS_DATASOURCE_ID yet...
+    datasrcs["views"] = {"main": {
+        "initialCharts": {
+            "THIS_DATASOURCE_ID": charts,
+        },
+        "dataSources": {"THIS_DATASOURCE_ID": {"layout": "gridstack"}}
+    }}
 
     config_json = json.dumps(datasrcs, indent=2)
     if group_id is None:
@@ -287,7 +376,8 @@ def save_view(request, conn=None, **kwargs):
 
     # We want to find the "view"
     current_view = json_data["args"]["state"]["currentView"]
-    charts = json_data["args"]["state"]["view"]["initialCharts"]
+    view_json = json_data["args"]["state"]["view"]
+    charts = view_json["initialCharts"]
     # need to use "mdv_config_ID" to find the config FileAnnotation
     for config_id, data in charts.items():
         ann_id = get_ann_id(config_id)
@@ -297,7 +387,7 @@ def save_view(request, conn=None, **kwargs):
         if "views" not in config_json:
             config_json["views"] = {}
 
-        config_json["views"][current_view] = charts
+        config_json["views"][current_view] = view_json
 
         config_txt = json.dumps(config_json, indent=2).encode('utf8')
         update_file_ann(conn, ann_id, config_txt)
@@ -346,7 +436,7 @@ def _table_cols_byte_offsets(configid, conn, clear_cache=False):
 
     # go through config to get bytes offsets for all columns
     # We combine the columns for each table in the config...
-    for col in get_columns(config_json):
+    for col in config_json["columns"]:
         column_name = col["name"]
         bytes_length = col["bytes"][1] - col["bytes"][0]
         col_byte_offsets[column_name] = [offset, offset + bytes_length - 1]
@@ -416,13 +506,13 @@ def table_bytes(request, configid, conn=None, **kwargs):
     return rsp
 
 
-def get_columns(mdv_config):
+# def get_columns(mdv_config):
     # We combine the columns for each table in the config...
     # Making sure we avoid duplicate names/fields
-    columns = []
-    column_names = []
+    # columns = []
+    # column_names = []
 
-    for col in mdv_config["columns"]:
+    # for col in mdv_config["columns"]:
         # colname = col["name"]
         # increment = 1
         # # avoid duplicate names - TODO: move this to submit()
@@ -436,11 +526,11 @@ def get_columns(mdv_config):
         # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
         # This requires the MDV project including data to be fully saved into JSON config
         # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
-        if "data" in col:
-            del (col["data"])
-        columns.append(col)
+        # if "data" in col:
+        #     del (col["data"])
+        # columns.append(col)
 
-    return columns
+    # return columns
 
 
 @login_required()
@@ -452,21 +542,47 @@ def views(request, configid, conn=None, **kwargs):
     # If views exist, simply return them...
     if "views" in config_json:
         rsp = {}
-        for view_id, charts in config_json["views"].items():
-            # main, etc
-            rsp[view_id] = {"initialCharts": charts}
+        for view_id, view_config in config_json["views"].items():
+            # main, etc - charts is {datasource_id: []}
+            initCharts = {}
+            charts = view_config["initialCharts"]
+            for datasourceId, ds_charts in charts.items():
+                # If we saved this view before knowing the file ID we saved it to...
+                if datasourceId == "THIS_DATASOURCE_ID":
+                    datasourceId = charts_id(configid)
+                initCharts[datasourceId] = ds_charts
+            view_config["initialCharts"] = initCharts
+
+            if "dataSources" in view_config:
+                ds = {}
+                for datasourceId, ds_info in view_config["dataSources"].items():
+                    # If we saved this view before knowing the file ID we saved it to...
+                    if datasourceId == "THIS_DATASOURCE_ID":
+                        datasourceId = charts_id(configid)
+                    ds[datasourceId] = ds_info
+                view_config["dataSources"] = ds
+            rsp[view_id] = view_config
         return JsonResponse(rsp)
 
-    # ...otherwise generate an initial view from scratch...
-    grid_x = 0
-    grid_y = 0
-    chart_size_x = 4
-    chart_size_y = 4
+    # create a default view...
+    view_charts = add_default_charts(config_json)
+    vw = {
+        "main": {
+            "initialCharts": {
+                charts_id(configid): view_charts
+            },
+            "dataSources":{charts_id(configid):{"layout":"gridstack"}}
+        }
+    }
+    return JsonResponse(vw)
 
-    views = []
+
+def add_default_charts(config_json, charts=[], add_table=True,
+                       add_thumbs=True, add_summary=True):
+    
     column_names = []
-
-    columns = get_columns(config_json)
+    columns = config_json["columns"]
+    # Don't add webclient-link column into Table
     column_names = [col["name"] for col in columns if col["name"] != WEBCLIENT_LINK]
     image_col = None
     for idx, col in enumerate(columns):
@@ -474,51 +590,85 @@ def views(request, configid, conn=None, **kwargs):
             image_col = col
             image_col_index = idx
 
-    # lets add a table...
-    col_widths = {}
+    # first, layout existing charts...
+    grid_x = 0
+    grid_y = 0
+
+    chart_count = len(charts)
+
+    # With the grid layout, we have 12 columns
+    TOTAL_COLS = 12
+    # do we save the right column for image panels?
+    right_col_images = image_col is not None and (add_thumbs or add_summary)
+
+    # most layouts divide the 12 grid into 4 (3 spaces per chart)
+    chart_size_x = 3
+    chart_size_y = 3
+    available_cols = TOTAL_COLS
+
+    # some layouts use bigger charts
+    if right_col_images:
+        available_cols = 9
+        if chart_count < 3:
+            chart_size_x = 4
+            available_cols = 8
+    else:
+        if chart_count < 4:
+            chart_size_x = 4
+
+
+    # layout the existing charts into rows/columns
+    for chart in charts:
+        chart["gsposition"] = [grid_x, grid_y]
+        chart["gssize"] = [chart_size_x, chart_size_y]
+        grid_x += chart_size_x
+        # if no room for next chart, start new row...
+        if grid_x + chart_size_x > available_cols:
+            grid_x = 0
+            grid_y += chart_size_y
+
+    # Always add a table below the charts, on a new row
+    # using all available columns
+    # if part-way through a row, start a new one...
+    table_chart_size_x = available_cols - grid_x
+    # if we had no charts, squeeze table into top-left
+    if chart_count == 0 and right_col_images:
+        table_chart_size_x = chart_size_x
+
+    table_col_widths = {}
     for name in column_names:
-        col_widths[name] = len(name) * 10
-    views.append({
+        table_col_widths[name] = len(name) * 10
+    charts.append({
         "title": "Table",
         "legend": "Some table data",
         "type": "table_chart",
         "param": column_names,
-        "id": "table_chart_%s" % configid,
-        "column_widths": col_widths,
+        "id": "table_chart_uuid? FIXME?",
+        "column_widths": table_col_widths,
         "gsposition": [
             grid_x,
             grid_y
         ],
         "gssize": [
-            chart_size_x,
+            table_chart_size_x,
             chart_size_y
         ]
     })
     grid_x = grid_x + chart_size_x
 
-    # If we have multiple number columns, add Scatter Plot...
-    # if len(number_cols) > 1:
-    #     views.append({
-    #         "type":"wgl_scatter_plot",
-    #         "title":"Scatter Plot",
-    #         "param":[
-    #             number_cols[0].name,
-    #             number_cols[1].name
-    #         ],
-    #         "size": [
-    #             chart_width,
-    #             chart_height
-    #         ],
-    #         "position": [
-    #             pos_x,
-    #             pos_y
-    #         ]
-    #     })
-    #     pos_x = pos_x + chart_width + gap
-
-    if image_col:
-        views.append({
-            # Thumbnails to show filtered images
+    # thumbs and summary go in right column...
+    grid_x = TOTAL_COLS - chart_size_x
+    grid_y = 0
+    
+    # Thumbnails to show filtered images
+    if right_col_images and add_thumbs:
+        thumbs_chart_size_y = chart_size_y
+        if chart_count < 2:
+            # put thumbs in 2nd column
+            grid_x = chart_size_x
+        else:
+            thumbs_chart_size_y = 2
+        charts.append({
             "title": "Thumbnails",
             "legend": "",
             "type": "image_table_chart",
@@ -535,14 +685,18 @@ def views(request, configid, conn=None, **kwargs):
             ],
             "gssize": [
                 chart_size_x,
-                chart_size_y
+                thumbs_chart_size_y
             ]
         })
-        grid_x = grid_x + chart_size_x
+        if chart_count < 2:
+            # side by side
+            grid_x += chart_size_x
+        else:
+            grid_y += thumbs_chart_size_y
 
     # Show a summary - selected Image (if we have Images)
-    if image_col:
-        views.append({
+    if right_col_images and add_summary:
+        charts.append({
             "title": "Summary",
             "legend": "",
             "type": "row_summary_box",
@@ -565,15 +719,7 @@ def views(request, configid, conn=None, **kwargs):
         })
         grid_x = grid_x + chart_size_x
 
-    vw = {
-        "main": {
-            "initialCharts": {
-                charts_id(configid): views
-            },
-            "dataSources":{charts_id(configid):{"layout":"gridstack"}}
-        }
-    }
-    return JsonResponse(vw)
+    return charts
 
 
 def _config_json(conn, fileid):
@@ -598,7 +744,13 @@ def datasources(request, configid, conn=None, **kwargs):
 
     # Load
     config_json = _config_json(conn, configid)
-    columns = get_columns(config_json)
+    columns = config_json["columns"]
+    # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
+    # This requires the MDV project including data to be fully saved into JSON config
+    # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
+    for col in columns:
+        if "data" in col:
+            del (col["data"])
 
     # Single datasource since we join everything into one table
     ds = [
