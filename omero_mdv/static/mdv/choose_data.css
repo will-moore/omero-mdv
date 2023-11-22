@@ -18,10 +18,10 @@ body {
   main {
     overflow: auto;
     flex: 1 1 auto;
-    /* https://uigradients.com/#Ash */
-    background: #606c88;  /* fallback for old browsers */
-    background: -webkit-linear-gradient(to right, #3f4c6b, #606c88);  /* Chrome 10-25, Safari 5.1-6 */
-    background: linear-gradient(to right, #3f4c6b, #606c88); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+    /* https://uigradients.com/#MidnightCity */
+    background: #232526;  /* fallback for old browsers */
+    background: -webkit-linear-gradient(to right, #414345, #232526);  /* Chrome 10-25, Safari 5.1-6 */
+    background: linear-gradient(to right, #414345, #232526); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
   }
   h2,
   h3 {
@@ -68,7 +68,8 @@ body {
     position: sticky;
     top: 0px;
     padding: 10px;
-    background: repeating-linear-gradient(180deg,#ddd 0px, #ddd 1px,#3f4c6b 1px, #3f4c6b 1000px);
+    /* Use background to add the top border, which is lost with 'sticky' position */
+    background: repeating-linear-gradient(180deg,#ddd 0px, #ddd 1px,#414345 1px, rgb(20, 21, 22) 1000px);
     border-top: 0;
   }
   article {
@@ -109,9 +110,7 @@ body {
   button[type="submit"] {
     cursor: pointer;
     color: #fff;
-    background: #0f0c29;  /* fallback for old browsers */
-    background: -webkit-linear-gradient(to right, #24243e, #302b63, #0f0c29);  /* Chrome 10-25, Safari 5.1-6 */
-    background: linear-gradient(to right, #24243e, #302b63, #0f0c29); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+    background: #232526;  /* fallback for old browsers */
     border-color: #0f0c29;
     display: inline-block;
     font-weight: 400;
