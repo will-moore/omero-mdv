@@ -13,17 +13,8 @@ displaying analysis results prepared for a [training workshop](https://omero-gui
 
 # Install
 
-Currently this has only been tested running on OMERO.web development server (see below).
 This requires `omero-py`. See instructions at https://github.com/ome/omero-py to create
-your python environment. Then, in the same python environment:
-
-```
-    $ git clone https://github.com/ome/omero-web
-    $ cd omero-web
-    $ pip install -e .
-```
-
-Do the same with `omero-mdv`. Clone this repo, then:
+your python environment. Then, in the same python environment, clone this repo and install:
 
 ```
     $ cd omero-mdv
@@ -37,23 +28,26 @@ Do the same with `omero-mdv`. Clone this repo, then:
 
 ```
 
+MDV requires particular http headers to allow `SharedArrayBuffers` to work in the browser.
+These headers need to be included in the `nginx` config (will need to regenerate the
+config and restart omero-web after these steps):
+
+```
+    $ omero config append omero.web.nginx_server_extra_config '"add_header Cross-Origin-Opener-Policy same-origin;"'
+    $ omero config append omero.web.nginx_server_extra_config '"add_header Cross-Origin-Embedder-Policy require-corp;"'
+```
+
 # Running Django dev server
 
-MDV requires particular headers to allow SharedArrayBuffers to work in the browser.
-These will be added by Django Middleware but are not included for static requests.
-When deployed in production, these headers should be added by NGINX.
-
-```
-    Cross-Origin-Opener-Policy: same-origin
-    Cross-Origin-Embedder-Policy: require-corp
-```
-
 When running the development devserver, we need force the processing of static
-requests via the Middleware, which can be achieved with `--nostatic`.
-For example, to use the `omero-web` repo installed above:
+requests via the Middleware which adds the http headers above. This can be achieved with
+the Django `runserver --nostatic` option.
+For example, when running omero-web from source:
 
 ```
+    $ git clone https://github.com/ome/omero-web
     $ cd omero-web
+    $ pip install -e .
     $ python omeroweb/manage.py runserver 4080 --nostatic
 ```
 Then go to http://localhost:4080/
@@ -77,3 +71,8 @@ Checkout that branch (rebase if desired), then build and copy assets to this rep
     $ cp vite-dist/index.html /path/to/omero-mdv/omero_mdv/templates/mdv/
 ```
 
+
+# Sample demo data
+
+Check the `docs` directory for instructions on how to find and import sample data that
+can be used to demonstrate or test the OMERO.mdv app.
