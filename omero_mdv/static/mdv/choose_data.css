@@ -27,6 +27,15 @@ body {
   h3 {
     font-weight: 400;
   }
+  /* icons */
+  h3 svg {
+    font-size: 26px;
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    top: -2px;
+    margin-right: 7px;
+  }
   ul {
     list-style: none;
     padding: 0;
