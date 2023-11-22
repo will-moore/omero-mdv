@@ -3,6 +3,7 @@ from io import BytesIO
 from collections import defaultdict
 from datetime import datetime
 import time
+from random import choices
 
 from django.http import Http404
 import numpy as np
@@ -15,6 +16,13 @@ MDV_ANN_NAMESPACE = "omero-mdv_project.json"
 
 # if we have a number column with no value, what do we use?
 MISSING_NUMBER = 0
+
+
+def get_random_id(length=6):
+    # chars include A-Z a-z
+    letters = [chr(i) for i in range(65, 91)] + [chr(i) for i in range(97, 123)]
+    return "".join(choices(letters, k=length))
+
 
 def get_mdv_ann(conn, file_id):
     """Get the MDV table_offsets Annotation linked to File Annotation"""

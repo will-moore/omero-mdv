@@ -19,7 +19,7 @@ from django.conf import settings
 
 from .utils import get_mapann_data, table_to_mdv_columns, list_file_anns, \
     get_text_indices, get_column_bytes, datasets_to_mdv_columns, mapanns_to_mdv_columns, update_file_ann, \
-    save_text_to_file_annotation, get_column_values, marshal_mdv_column
+    save_text_to_file_annotation, get_column_values, get_random_id
 
 JSON_FILEANN_NS = "omero.web.mdv_config.json"
 
@@ -234,7 +234,7 @@ def submit_form(request, conn=None, **kwargs):
             "title": "Filter Selection",
             "type": "selection_dialog",
             "param": filters,
-            "id": "TODO:random_filter_id",
+            "id": get_random_id(),
             "filters": {},
         }
         for col_name in filters:
@@ -261,7 +261,7 @@ def submit_form(request, conn=None, **kwargs):
           "legend": "",
           "type": "row_chart",
           "param": rowchart_name,
-          "id": "vIQ7Pg:TODO",
+          "id": get_random_id(),
           "axis": {
             "x": {
               "textSize": 14,
@@ -297,7 +297,7 @@ def submit_form(request, conn=None, **kwargs):
             "textSize": 13,
             "tickfont": 10
           },
-          "id": "dmJSCl",
+          "id": get_random_id(),
           "display_max": col["minMax"][1],
           "display_min": col["minMax"][0],
           # "bin_number": 10,
