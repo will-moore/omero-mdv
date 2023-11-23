@@ -340,13 +340,14 @@ def get_webclient_links_column(image_ids, bytes_offset):
         values.append(f"{url}?show=image-{iid}")
         indices.append(index)
 
-    byte_count = len(get_column_bytes(indices))
+    byte_count = len(get_column_bytes(indices, np.int16))
 
     col = {
         "name": WEBCLIENT_LINK,
         "field": WEBCLIENT_LINK,
         "is_url": True,
-        "datatype": "text",
+        # text16 allows up to 65536 values instead of 256
+        "datatype": "text16",
         "values": values,
         "bytes": [bytes_offset, bytes_offset + byte_count],
         "data": indices,
@@ -484,7 +485,7 @@ def table_bytes(request, configid, conn=None, **kwargs):
                 dtype = None
                 if col["datatype"] == "text":
                     dtype = np.int8
-                elif col["datatype"] == "multitext":
+                elif col["datatype"] in ("multitext", "text16"):
                     dtype = np.int16
                 column_bytes = get_column_bytes(col["data"], dtype)
             break
@@ -583,7 +584,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
     column_names = []
     columns = config_json["columns"]
     # Don't add webclient-link column into Table
-    column_names = [col["name"] for col in columns if col["name"] != WEBCLIENT_LINK]
+    column_names = [col["name"] for col in columns]  # if col["name"] != WEBCLIENT_LINK]
     image_col = None
     for idx, col in enumerate(columns):
         if col["name"].lower() == "image":
