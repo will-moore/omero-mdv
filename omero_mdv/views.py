@@ -325,7 +325,7 @@ def submit_form(request, conn=None, **kwargs):
 
     # redirect to app, with absolute config URL...
     url = reverse("mdv_index")
-    config_url = f"config/{ann_id}/"
+    config_url = f"project/{ann_id}/"
 
     return HttpResponseRedirect("%s?dir=%s" % (url, config_url))
 
