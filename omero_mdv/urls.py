@@ -28,6 +28,10 @@ urlpatterns = [
     
     re_path(r"^project/(?P<configid>[0-9]+)/state.json$", views.state, name='mdv_state'),
     re_path(r"^project/(?P<configid>[0-9]+)/views.json$", views.views, name='mdv_views'),
+    # Not sure why we need get_view AND views.json?
+    re_path(r"^project/(?P<configid>[0-9]+)/get_view$", views.views, name='mdv_get_views'),
+    # get_data
+    re_path(r"^project/(?P<configid>[0-9]+)/get_data$", views.table_bytes, name='mdv_get_data'),
 
     # We name a table datasource mdv_config_ID, so we use that ID (ignore configid for now)
     re_path(r"^project/(?P<configid>[0-9]+)/mdv_config_(?P<tableid>[0-9]+).json$", views.table_cols_byte_offsets),

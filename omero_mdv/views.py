@@ -455,17 +455,25 @@ def table_cols_byte_offsets(request, configid, conn=None, **kwargs):
 @login_required()
 def table_bytes(request, configid, conn=None, **kwargs):
 
-    range_header = request.headers['Range']
-    m = re.search('(\d+)-(\d*)', range_header)
-    g = m.groups()
+    print("table_bytes....")
+    col_names = None
+    if request.method == "POST":
+      json_data = json.loads(request.body)
+      print("table_data POST", json_data)
+      col_names = [col["name"] for col in json_data.get("columns")]
+      print("col_names", col_names)
 
-    byte1 = int(g[0]) if g[0] else None
-    byte2 = int(g[1]) if g[1] else None
+    # range_header = request.headers['Range']
+    # m = re.search('(\d+)-(\d*)', range_header)
+    # g = m.groups()
 
-    if byte1 is None or byte2 is None:
-        raise Http404(
-            "No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
-    size = byte2 - byte1
+    # byte1 = int(g[0]) if g[0] else None
+    # byte2 = int(g[1]) if g[1] else None
+
+    # if byte1 is None or byte2 is None:
+    #     raise Http404(
+    #         "No byte 'Range' in request Header: got `%s-%s`" % (byte1, byte2))
+    # size = byte2 - byte1
 
     # get data from config...
     config_json = _config_json(conn, configid)
@@ -476,7 +484,9 @@ def table_bytes(request, configid, conn=None, **kwargs):
     column_bytes = None
     # find the column that has the correct byte1 (used as column ID)
     for col in config_json["columns"]:
-        if col["bytes"][0] == byte1:
+        # if col["bytes"][0] == byte1:
+        if col["name"] in col_names:
+            print("col", col["name"])
             # handle omero tables, load table below
             if "omero_table_file_id" in col:
                 tableid = col.get("omero_table_file_id")
@@ -488,6 +498,7 @@ def table_bytes(request, configid, conn=None, **kwargs):
                 elif col["datatype"] in ("multitext", "text16"):
                     dtype = np.int16
                 column_bytes = get_column_bytes(col["data"], dtype)
+            
             break
 
     if tableid is not None:
@@ -501,8 +512,9 @@ def table_bytes(request, configid, conn=None, **kwargs):
         finally:
             t.close()
 
+    print("bytes!", len(column_bytes))
     rsp = HttpResponse(column_bytes, content_type="application/octet-stream")
-    rsp['Content-Range'] = 'bytes {0}-{1}/{2}'.format(byte1, byte2, size)
+    # rsp['Content-Range'] = 'bytes {0}-{1}/{2}'.format(byte1, byte2, size)
     rsp['Accept-Ranges'] = 'bytes'
     return rsp
 
@@ -540,6 +552,12 @@ def views(request, configid, conn=None, **kwargs):
     # Load
     config_json = _config_json(conn, configid)
 
+    # Handle POST to project/ID/get_view...
+    view_name = None
+    if request.method == "POST":
+      json_data = json.loads(request.body)
+      view_name = json_data.get("view")
+
     # If views exist, simply return them...
     if "views" in config_json:
         rsp = {}
@@ -563,6 +581,9 @@ def views(request, configid, conn=None, **kwargs):
                     ds[datasourceId] = ds_info
                 view_config["dataSources"] = ds
             rsp[view_id] = view_config
+
+        if view_name is not None and view_name in rsp:
+            rsp = rsp[view_name]
         return JsonResponse(rsp)
 
     # create a default view...
