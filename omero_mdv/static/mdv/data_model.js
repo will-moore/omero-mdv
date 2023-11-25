@@ -10,9 +10,14 @@ class DataModel extends EventTarget {
     // Expect a single Table, which is "ordered"
     // tableData has mdv "columns"
     addTable(tableId, tableData) {
-      console.log("ADD_TABLE!! ", tableId, tableData)
+      console.log("test addTable...")
       tableData.id = tableId
       this.omero_tables.push(tableData);
+      this.dispatchEvent(new CustomEvent("dataAdded", {}));
+    }
+
+    removeTable(tableId) {
+      this.omero_tables = this.omero_tables.filter(table => table.id != tableId);
       this.dispatchEvent(new CustomEvent("dataAdded", {}));
     }
 
@@ -22,6 +27,11 @@ class DataModel extends EventTarget {
       console.log("ADD MAP-ANNS! ", tableData)
       tableData.id = sourceId
       this.unordered_data.push(tableData);
+      this.dispatchEvent(new CustomEvent("dataAdded", {}));
+    }
+
+    removeMapAnns(sourceId) {
+      this.unordered_data = this.unordered_data.filter(table => table.id != sourceId);
       this.dispatchEvent(new CustomEvent("dataAdded", {}));
     }
 

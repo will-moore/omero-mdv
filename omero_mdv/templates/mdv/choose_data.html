@@ -160,7 +160,6 @@
 
     const tableTemplate = ({columns, rows}) => {
       return html`
-        ${ columns.length == 0 ? "loading..." : ""}
         <table>
           <thead>
           <tr>${columns.map((col) => html`<th>${col.name}</th>`)}</tr>
@@ -183,7 +182,6 @@
     }
 
     // Handle click on Tables checkbox...
-    // document.getElementById("mapAnnsCheckbox").addEventListener("click", (event) => {
     function handleTableClick(event) {
       const checked = event.target.checked;
       const tableId = event.target.value;
@@ -195,6 +193,7 @@
         document.querySelectorAll("input[name='file']").forEach(i => {
           if (i.checked && i.value != tableId) {
             i.checked = false;
+            datasources.removeTable(i.value);
           }
         });
 
@@ -202,11 +201,14 @@
         let table_data = fetch(url)
           .then(rsp => rsp.json())
           .then(data => {
-            console.log("data", data);
-            datasources.addTable(tableId, data);
+            // final check, incase user un-checked while loading..
+            if (event.target.checked) {
+              datasources.addTable(tableId, data);
+            }
           })
+      } else {
+        datasources.removeTable(tableId);
       }
-      datasources.omero_tables[tableId].display = checked;
     };
     // bind click handler to omero.table checkboxes
     document.querySelectorAll("input[name='file']").forEach(i => i.addEventListener("click", handleTableClick));
@@ -250,9 +252,9 @@
             // columns = [{"name": "Image"}].concat(columns);
             datasources.addMapAnns(tableId, data);
           })
+      } else {
+        datasources.removeMapAnns(tableId);
       }
-      datasources.map_anns.display = checked;
-      renderTable();
     };
   </script>
 </html>
