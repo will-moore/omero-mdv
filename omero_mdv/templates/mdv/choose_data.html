@@ -23,7 +23,7 @@
           {% for ann in anns %}
           <li>
             <label>
-              <input name="file" type="radio" value="{{ann.file.id}}" />
+              <input name="file" type="checkbox" value="{{ann.file.id}}" />
               File ID: {{ ann.file.id }} Name: {{ann.file.name }}
             </label>
           </li>
@@ -188,13 +188,16 @@
       const checked = event.target.checked;
       const tableId = event.target.value;
       enableSubmit();
-      // if data not loaded...
-      // if (!datasources.omero_tables[tableId]) {
-      //   datasources.addTable(tableId, {columns: [], display: false});
-      // }
+
       if (checked) {
-        // http://localhost:4080/webclient/omero_table/2154/json/?limit=500&offset=0
-        // let url = `${WEB_INDEX}omero_table/${tableId}/json/?limit=500&offset=0`;
+        // We only allow 1 table to be chosen, so we need to uncheck all others...
+        // (we don't use radio buttons as we want to allow un-checking)
+        document.querySelectorAll("input[name='file']").forEach(i => {
+          if (i.checked && i.value != tableId) {
+            i.checked = false;
+          }
+        });
+
         let url = `${MDV_INDEX}table_info/${tableId}/`
         let table_data = fetch(url)
           .then(rsp => rsp.json())
