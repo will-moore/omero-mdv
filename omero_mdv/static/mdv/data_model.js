@@ -10,7 +10,6 @@ class DataModel extends EventTarget {
     // Expect a single Table, which is "ordered"
     // tableData has mdv "columns"
     addTable(tableId, tableData) {
-      console.log("test addTable...")
       tableData = this.convertBinayData(tableData);
       tableData.id = tableId
       this.omero_tables.push(tableData);
@@ -27,7 +26,6 @@ class DataModel extends EventTarget {
     // Handles "unordered" data: Map-Anns and Datasets
     // tableData has mdv "columns"
     addMapAnns(sourceId, tableData) {
-      console.log("ADD MAP-ANNS! ", tableData)
       tableData.id = sourceId
       tableData = this.convertBinayData(tableData);
       // sort according to OMERO.tables (if loaded)
