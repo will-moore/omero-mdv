@@ -643,7 +643,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
         "legend": "Some table data",
         "type": "table_chart",
         "param": column_names,
-        "id": "table_chart_uuid? FIXME?",
+        "id": get_random_id(),
         "column_widths": table_col_widths,
         "gsposition": [
             grid_x,
@@ -677,7 +677,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
                 "base_url": "./thumbnail/",
                 "type": "png"
             },
-            "id": "6qxshC",
+            "id": get_random_id(),
             "image_width": 96,
             "gsposition": [
                 grid_x,
@@ -706,7 +706,7 @@ def add_default_charts(config_json, charts=[], add_table=True,
                 "type": "png",
                 "param": image_col_index
             },
-            "id": "XulQsf",
+            "id": get_random_id(),
             # "image_width": chart_width,
             "gsposition": [
                 grid_x,
