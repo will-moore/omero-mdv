@@ -577,9 +577,11 @@ def views(request, configid, conn=None, **kwargs):
     return JsonResponse(vw)
 
 
-def add_default_charts(config_json, charts=[], add_table=True,
+def add_default_charts(config_json, charts=None, add_table=True,
                        add_thumbs=True, add_summary=True):
-    
+
+    if charts is None:
+        charts = []
     column_names = []
     columns = config_json["columns"]
     # Don't add webclient-link column into Table
