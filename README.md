@@ -72,6 +72,10 @@ These assets are built from the MDV project that is included as a submodule.
     $ cp vite-dist/index.html ../omero_mdv/templates/mdv/
 ```
 
+NB: if you need to use a different branch or commit of MDV, you should
+check it out, commit the submodule change and also commit the assets
+built from that MDV commit.
+
 
 # Sample demo data
 
