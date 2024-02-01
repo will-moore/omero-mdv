@@ -747,12 +747,24 @@ def datasources(request, configid, conn=None, **kwargs):
     # Load
     config_json = _config_json(conn, configid)
     columns = config_json["columns"]
+    for c in columns:
+        c["field"] = c["name"]
     # We remove 'data' for map-ann/dataset columns, so it is lazily loaded as bytes
     # This requires the MDV project including data to be fully saved into JSON config
     # NB: if we *didn't* remove 'data' here, we'd need to encode it somehow for text/multitext?
     for col in columns:
+        # convert data (indices) into strings
         if "data" in col:
-            del (col["data"])
+            if col["datatype"] in ("text", "text16"):
+                data = [col['values'][idx] for idx in col["data"]]
+                col["data"] = data
+            elif col["datatype"] == "multitext":
+                data = []
+                values = col['values']
+                for row in col["data"]:
+                    strings = [values[idx] for idx in row if idx < len(values)]
+                    data.append(",".join(strings))
+                col["data"] = data
 
     # Single datasource since we join everything into one table
     ds = [
