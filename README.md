@@ -54,19 +54,22 @@ Then go to http://localhost:4080/
 # Update MDV viewer
 
 The MDV viewer html and static assets are hosted in this repo
-under `templates/mdv/index.html` and `omero_mdv/static/mdv/`
-
-We need to build the MDV viewer to use relative links to static assets.
-This is currently configured on this branch: https://github.com/will-moore/MDV/tree/vite_config_base
-
-Checkout that branch (rebase if desired), then build and copy assets to this repo:
+under `templates/mdv/index.html` and `omero_mdv/static/mdv/`.
+These assets are built from the MDV project that is included as a submodule.
 
 ```
+    # checkout the MDV project
+    $ git submodule init
+    $ git submodule update
+    $ cd MDV
+
+    # install the JavaScript dependencies and build
     $ npm install
     $ npm run vite-build
 
-    $ cp -r vite-dist/assets/ /path/to/omero-mdv/omero_mdv/static/mdv/assets/
-    $ cp vite-dist/index.html /path/to/omero-mdv/omero_mdv/templates/mdv/
+    # copy the assests into the correct locations
+    $ cp -r vite-dist/assets/ ../omero_mdv/static/mdv/assets/
+    $ cp vite-dist/index.html ../omero_mdv/templates/mdv/
 ```
 
 
