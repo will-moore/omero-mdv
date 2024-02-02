@@ -57,7 +57,7 @@ The MDV viewer html and static assets are hosted in this repo
 under `templates/mdv/index.html` and `omero_mdv/static/mdv/`
 
 We need to build the MDV viewer to use relative links to static assets.
-This is currently configured on this branch: https://github.com/will-moore/MDV/tree/vite_config_base
+This is currently configured on this branch: https://github.com/will-moore/MDV/tree/omero-mdv-build
 
 Checkout that branch (rebase if desired), then build and copy assets to this repo:
 
